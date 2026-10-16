@@ -1,0 +1,17 @@
+Orbit para Mac
+
+Instalación
+1. Arrastra Orbit a la carpeta Aplicaciones.
+2. Abre Orbit desde Aplicaciones.
+3. Si macOS indica que no puede verificar al desarrollador, abre Ajustes del Sistema, entra en
+   Privacidad y seguridad y selecciona «Abrir igualmente» junto al aviso de Orbit. Este paso solo
+   se hace la primera vez. Orbit no está firmado con un certificado de desarrollador de Apple.
+4. Sigue el asistente de instalación. Necesitas tu propia copia de Super Mario Galaxy
+   (EE. UU., RMGE01) y las herramientas de línea de comandos de Apple, que el asistente instala.
+
+Requisitos
+- Mac con Apple Silicon y macOS 14 o posterior.
+- 12 GB libres durante la instalación y 3,5 GB después.
+
+Orbit no incluye ningún archivo del juego. No está afiliado a Nintendo ni cuenta con su
+respaldo.

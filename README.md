@@ -1,113 +1,122 @@
-# Nebula
+# Orbit
 
-Nebula runs **Super Mario Galaxy** natively on Windows. It translates the game's PowerPC
-machine code into C++ ahead of time, compiles that code on your PC from your own copy of the
-game, and runs it on a native runtime with a Direct3D 12 renderer and Windows audio and input.
-Nebula contains no Nintendo code or assets; you need your own copy of the game.
+Orbit runs **Super Mario Galaxy** natively on Macs with Apple Silicon. It is the macOS port of
+[Nebula](https://github.com/keepvaibin/nebula) by keepvaibin, which translates the game's
+PowerPC machine code into C++ ahead of time. Orbit compiles that code on your Mac from your own
+copy of the game and runs it with a Metal renderer and macOS audio and input.
 
-[Download](https://github.com/keepvaibin/nebula/releases/latest) ·
-[Controls](docs/KEYBOARD_CONTROLS.md) ·
-[Building from source](docs/BUILDING.md) ·
-[Architecture](docs/ARCHITECTURE.md)
+Orbit contains no Nintendo code, game files or disc images. You need your own copy of the game.
+
+[Download](../../releases/latest) · [Controls](docs/KEYBOARD_CONTROLS.md) ·
+[Nebula's documentation](docs/NEBULA-README.md) · [Third-party notices](THIRD-PARTY-NOTICES.md)
 
 Not affiliated with or endorsed by Nintendo.
 
 ## Project status
 
-Nebula is a work in progress. The game is playable from the start, but some areas run below
-60 FPS on weaker hardware, some lighting and bloom effects differ from the original, and bugs
-remain. See [Known issues](#known-issues).
+Orbit is a work in progress, like Nebula. The game is playable from the start on an M-series
+Mac at 60 FPS. Some lighting effects differ from the original and bugs remain.
 
-## AI-generated project
-
-Nebula was built with AI coding agents (Anthropic's Claude). The recompiler, runtime,
-installer, tests and documentation were written by AI agents and directed, reviewed and tested
-by the project's author. The game's own logic, including Mario's physics, is not AI-written:
-it is the original game code, translated instruction by instruction by the recompiler.
-
-## How it works
-
-1. **Recompiler** (`crates/`, Rust). Reads the game disc or extracted files, checks that it
-   is the supported release (RMGE01, revision 0) and emits C++ for every function in the game
-   executable, the HOME Menu module and the audio DSP program.
-2. **Runtime** (`runtime/`, C++). Loads the compiled game module and provides what the Wii
-   hardware provided: memory, a GX command processor drawn with Direct3D 12, the audio
-   interface and DSP, Wii Remote input from keyboard, mouse and controllers, disc and NAND
-   storage, and video timing.
-3. **Installer and launcher** (`installer/`, C#). `Nebula-Setup.exe` downloads a pinned
-   compiler toolchain, compiles the game modules from your copy of the game and installs the
-   prebuilt runtime. `Nebula.exe` starts the game; `NebulaSettings.exe` changes settings.
+These features are implemented but have not been tested with the physical controllers yet:
+real Wii Remotes over Bluetooth, the Switch Pro Controller and the Switch 2 Pro Controller.
 
 ## Features
 
-- Keyboard and mouse, Xbox controllers, the Switch Pro Controller and the Switch 2 Pro
-  Controller (USB), remappable. Switch controllers point with the gyro (R recenters) and tilt
-  for the Star Ball and ray surfing.
-  Vibration follows the game's Wii Remote motor.
-- Aspect ratios from 4:3 to 32:9 and internal resolution up to 16x.
-- Anti-aliasing (SMAA, FXAA), AMD FidelityFX FSR 1 upscaling, anisotropic filtering and
-  optional per-pixel lighting.
-- In-game settings menu (F1, View + Menu on Xbox, Minus + Plus on Switch).
-- Saves stored in `%LOCALAPPDATA%\Nebula\saves`.
+- A Mac app with a setup assistant. It checks your copy of the game, installs Apple's command
+  line tools if they are missing, compiles the game and applies recommended settings.
+- Native macOS full screen in its own Space. The green title bar button or Control-Command-F
+  switches between full screen and a window.
+- The picture adapts to any display shape, including MacBook displays taller than 16:9, without
+  stretched menus.
+- Community HD textures and HD HUD included in the release, with preloading to avoid stutter.
+  The texture loader reads packs in Dolphin's custom texture format.
+- Keyboard and mouse, Xbox and PlayStation controllers, Switch Pro controllers and real
+  Wii Remotes. Buttons can be remapped in the in-game menu (F1).
+- Settings for resolution, aspect ratio, anti-aliasing, anisotropic filtering, draw distance,
+  audio volumes and controls, in the app and in the in-game menu.
+- Box art downloaded from GameTDB on your Mac, as Dolphin does.
+
+The app's interface is in English or Spanish, following the language of the system.
 
 ## Requirements
 
-- Super Mario Galaxy, USA (RMGE01), revision 0, as an ISO, RVZ or extracted folder
-- Windows 10 (version 1803 or newer) or Windows 11, 64-bit
-- A GPU with Direct3D 12 support
-- 8 GB of RAM; 16 GB of free disk space during installation, about 5.5 GB afterwards
-- An internet connection for the first installation
-
-The least powerful system tested so far, an Intel Core Ultra 9 185H with its integrated
-graphics and 16 GB of RAM, runs the game at a locked 60 FPS at 1440p (16:10).
+- A Mac with Apple Silicon and macOS 14 or later.
+- Super Mario Galaxy, USA (RMGE01), revision 0, as a WBFS, ISO, RVZ, WIA, CISO or GCZ image or
+  an extracted folder.
+- Apple's command line tools. The setup assistant installs them.
+- 12 GB of free disk space during installation and about 3.5 GB afterwards.
 
 ## Install
 
-1. Download `Nebula-Setup.exe` from the [latest release](https://github.com/keepvaibin/nebula/releases/latest).
-   The file is not code-signed, so Windows SmartScreen shows "Unknown publisher"; choose
-   **More info**, then **Run anyway**.
-2. Select your game and choose **Install**. Setup downloads the toolchain and compiles the game
-   modules; this takes a few minutes on a fast PC and longer on slower ones.
-3. Start **Nebula** from the Start menu.
+1. Download `Orbit.dmg` from the [latest release](../../releases/latest) and open it.
+2. Drag Orbit to the Applications folder and open it from there.
+3. Orbit is not signed with an Apple developer certificate, so macOS blocks the first launch.
+   Open System Settings, go to Privacy & Security and select **Open Anyway** next to the Orbit
+   message. You only do this once.
+4. Follow the setup assistant. Installation takes between 3 and 15 minutes, depending on the Mac.
 
-Setup also updates, repairs, restores the previous version and uninstalls. Updates are signed;
-Setup checks the signature against the public key built into it before installing.
+The game is installed in `~/Library/Application Support/Orbit`. Saves are kept in
+`~/Library/Application Support/SuperMarioGalaxy/nand` and are not removed when you reinstall or
+repair the game.
+
+## How it works
+
+1. **Recompiler** (`crates/`, Rust, from Nebula). Reads the game disc, checks that it is the
+   supported release and emits C++ for every function in the game executable, the HOME Menu
+   module and the audio DSP program.
+2. **Runtime** (`runtime/`, C++, from Nebula). Provides what the Wii hardware provided: memory,
+   the GX graphics processor, audio, input, disc and NAND storage and video timing.
+3. **macOS platform layer** (`runtime/platform/macos`). Implements the Windows APIs the runtime
+   uses on top of AppKit, Core Audio, Game Controller and IOKit, and Direct3D 12 on top of
+   Metal. HLSL shaders are compiled with glslang and translated to Metal with SPIRV-Cross.
+4. **App** (`macos/`, Swift). The launcher, setup assistant and settings, and
+   `macos/package.sh`, which builds `Orbit.app` and `Orbit.dmg`.
 
 ## Building from source
 
-[docs/BUILDING.md](docs/BUILDING.md) covers the tools, building the recompiler, runtime and game
-modules by hand, running the tests and building the installer.
+You need Xcode, Rust (`rustup`), CMake, Ninja and Microsoft's DirectX headers:
 
-## Testing
+```sh
+brew install cmake ninja directx-headers
+cmake -S . -B ../build/runtime -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build ../build/runtime
+ctest --test-dir ../build/runtime
+macos/package.sh --textures <folder with the RMG texture pack>
+```
 
-- Recompiler: more than 500 tests (`cargo test --workspace`).
-- Runtime: 70 test programs (`ctest`) covering floating-point operations (checked against
-  Berkeley SoftFloat), GX command parsing and texture decoding, input mapping, the audio queue
-  and DSP, and settings files.
-- `tools/dev/verify_thp_native.cpp` compares the native movie decoder with the game's own
-  decoder frame by frame.
-- Gameplay is checked by playing back recorded input in a hidden window and by manual
-  playtesting.
+`package.sh` builds the recompiler and the launcher, downloads the official CMake and Ninja
+releases with pinned checksums, assembles `Orbit.app` and creates `Orbit.dmg` in `../dist`.
+Omit `--textures` to build an app without the texture packs.
 
-There is no automated whole-game comparison against the original hardware or an emulator yet.
-Floating-point results are close to, but not bit-exact with, the Wii.
+## Credits
 
-## Known issues
+Orbit exists thanks to these projects and people:
 
-- Heavy background CPU load can make the audio skip.
-- Some areas, for example the Gateway Galaxy, drop below 60 FPS on weaker CPUs.
-- Some lighting and bloom effects in the Comet Observatory differ from the original.
+- **Nebula** by keepvaibin, <https://github.com/keepvaibin/nebula>. Orbit is a fork of Nebula.
+  The recompiler, the runtime and the game support are Nebula's work.
+- The projects Nebula builds on: Aurora, Dusklight, WiiCompiled, the Petari decompilation
+  project, Berkeley SoftFloat, the Dolphin project's free DSP ROM, SMAA, AMD FidelityFX and the
+  `nod` disc library. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+- **HD textures** by CDAMJC and Razius, <https://forums.dolphin-emu.org/User-cdamjc>.
+- **HD HUD** by Super Hackio and SY24, <https://www.youtube.com/watch?v=P8lkzqYP7eg>.
+- **glslang, SPIRV-Tools and SPIRV-Cross** by The Khronos Group and contributors, for shader
+  translation.
+- **Dolphin**, whose custom texture format and GameTDB cover download Orbit follows.
+- **GameTDB**, <https://www.gametdb.com>, for the box art.
 
-Report problems on the [issue tracker](https://github.com/keepvaibin/nebula/issues).
+The texture pack credits are also shipped in `Orbit.app/Contents/Resources/Licenses`.
+
+## AI-assisted project
+
+Like Nebula, the macOS port was built with AI coding agents (Anthropic's Claude), directed,
+reviewed and tested by the project's author. The game's own logic is the original game code,
+translated instruction by instruction by Nebula's recompiler.
 
 ## License
 
-Nebula is licensed under the GNU General Public License v3.0 only ([LICENSE](LICENSE)).
-Third-party code and its licenses are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
-and [docs/PROVENANCE.md](docs/PROVENANCE.md).
-
-Nebula builds on work from Aurora, Dusklight, WiiCompiled, the Petari decompilation project,
-Berkeley SoftFloat, the Dolphin project's free DSP ROM, SMAA, AMD FidelityFX and the `nod` disc
-library.
+Orbit is licensed under the GNU General Public License v3.0 only ([LICENSE](LICENSE)), the same
+license as Nebula. Third-party code and its licenses are listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) and [docs/PROVENANCE.md](docs/PROVENANCE.md).
+The HD texture packs belong to their authors and are not covered by this license.
 
 "Super Mario Galaxy", "Wii" and "Nintendo" are trademarks of Nintendo.

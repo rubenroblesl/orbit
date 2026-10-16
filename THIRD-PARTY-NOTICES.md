@@ -141,8 +141,35 @@ Nebula was developed under the name GalaxyRecomp. Revisions before the change to
 > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 > SOFTWARE.
 
+## macOS port (Orbit)
+
+The macOS port, published as Orbit, adds the components below. Their license texts are in
+`Orbit.app/Contents/Resources/Licenses`.
+
+- glslang 16.6.0 by The Khronos Group and contributors (BSD-3-Clause and other permissive
+  licenses listed in its `LICENSE.txt`), <https://github.com/KhronosGroup/glslang>. Linked
+  statically into the runtime to compile HLSL shaders.
+- SPIRV-Tools vulkan-sdk-1.4.363.0 (Apache-2.0), <https://github.com/KhronosGroup/SPIRV-Tools>.
+- SPIRV-Headers vulkan-sdk-1.4.363.0 (MIT), <https://github.com/KhronosGroup/SPIRV-Headers>.
+- SPIRV-Cross vulkan-sdk-1.4.363.0 (Apache-2.0), <https://github.com/KhronosGroup/SPIRV-Cross>.
+  Translates SPIR-V shaders to Metal Shading Language.
+- xxHash 0.8.3 by Yann Collet (BSD-2-Clause), <https://github.com/Cyan4973/xxHash>, in
+  `third_party/xxhash`. Computes Dolphin-compatible custom texture names.
+- stb_image 2.30 by Sean Barrett (MIT or public domain), <https://github.com/nothings/stb>, in
+  `third_party/stb`. Decodes PNG custom textures.
+- sse2neon (MIT), <https://github.com/DLTcollab/sse2neon>, in `third_party/sse2neon`.
+- CMake 3.31.6 (BSD-3-Clause), <https://cmake.org>, and Ninja 1.12.1 (Apache-2.0),
+  <https://ninja-build.org>. The official release binaries are copied unmodified into the app to
+  compile the game modules on the user's Mac.
+- Community HD texture packs for Super Mario Galaxy, included in the release app with credit:
+  HD textures by CDAMJC and Razius, HD HUD by Super Hackio and SY24. See
+  [macos/TEXTURE-CREDITS.md](macos/TEXTURE-CREDITS.md). They belong to their authors and are not
+  covered by this repository's license.
+- Box art is downloaded from GameTDB (<https://www.gametdb.com>) on the user's Mac, as Dolphin
+  does. It is not part of this repository or the app.
+
 ## Nintendo content
 
 None of the licenses above apply to Nintendo software, game code, game assets, disc images or
-trademarks. Nebula is not affiliated with or endorsed by Nintendo and does not distribute that
+trademarks. Nebula and Orbit are not affiliated with or endorsed by Nintendo and do not distribute that
 material.
