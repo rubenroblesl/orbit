@@ -26,6 +26,7 @@
 #include <d3d12.h>
 #include <wrl/client.h>
 
+#include "galaxy/gx/custom_textures.h"
 #include "galaxy/gx/gx_bitfields.h"
 #include "galaxy/gx/guest_range_envelope.h"
 #include "galaxy/gx/placed_texture_allocator.h"
@@ -121,6 +122,11 @@ struct TextureHandle {
     bool from_efb_copy = false;
     bool generated_mips = false;
     std::uint32_t guest_byte_size = 0;
+    // A custom texture replaces the game's (custom_textures.h): `width`/`height` are the
+    // replacement's, `custom_scale` its width over the game texture's width.
+    bool custom = false;
+    bool arbitrary_mips = false;  // the replacement's lower levels carry their own content (_arb)
+    float custom_scale = 1.0f;
 };
 
 class TextureCache {
@@ -331,6 +337,9 @@ private:
         }
     };
     void retire(Entry&& entry);
+    // Uploads a custom texture for `key` and records its entry like a decoded one.
+    [[nodiscard]] TextureHandle upload_custom_texture(const Key& key, const TexImage& image,
+        std::uint32_t guest_byte_size, const CustomTextureData& data);
     // Decoded-map LRU maintenance. `decoded_lru_touch` moves a key to the most
     // recently used end; `decoded_lru_forget` removes it. Both are no-ops when
     // the key is absent, so the invalidation paths can call them unguarded.

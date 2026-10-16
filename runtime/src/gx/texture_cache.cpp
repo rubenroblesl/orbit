@@ -13,6 +13,7 @@
 #endif
 
 #include "galaxy/gx/texture_cache.h"
+#include "galaxy/gx/custom_textures.h"
 #include "galaxy/gx/dependency_event_capture.h"
 
 #include "galaxy/gx/render_config.h"
@@ -34,6 +35,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <thread>
+#include <mutex>
+#include <set>
 #include <vector>
 
 using Microsoft::WRL::ComPtr;
@@ -85,6 +88,33 @@ std::uint64_t decoded_resident_budget_bytes() {
         return static_cast<std::uint64_t>(mb) << 20;
     }();
     return budget;
+}
+
+// Device memory for custom textures, on top of the decoded budget. Packs replace the game's
+// textures with ones 4 to 16 times wider; GALAXY_CUSTOM_TEXTURE_BUDGET_MB sets it (0 unbounded).
+std::uint64_t custom_texture_budget_bytes() {
+    static const std::uint64_t budget = [] {
+        const char* value = std::getenv("GALAXY_CUSTOM_TEXTURE_BUDGET_MB");
+        if (value == nullptr || *value == '\0') return std::uint64_t{4096} << 20;
+        char* end = nullptr;
+        const unsigned long long mb = std::strtoull(value, &end, 10);
+        if (end == value || *end != '\0') return std::uint64_t{4096} << 20;
+        if (mb == 0ull || mb > (std::numeric_limits<std::uint64_t>::max() >> 21)) {
+            return std::numeric_limits<std::uint64_t>::max() >> 1;
+        }
+        return static_cast<std::uint64_t>(mb) << 20;
+    }();
+    return budget;
+}
+
+DXGI_FORMAT custom_texture_dxgi_format(CustomTextureFormat format) {
+    switch (format) {
+    case CustomTextureFormat::BC1: return DXGI_FORMAT_BC1_UNORM;
+    case CustomTextureFormat::BC2: return DXGI_FORMAT_BC2_UNORM;
+    case CustomTextureFormat::BC3: return DXGI_FORMAT_BC3_UNORM;
+    case CustomTextureFormat::BC7: return DXGI_FORMAT_BC7_UNORM;
+    default: return DXGI_FORMAT_R8G8B8A8_UNORM;
+    }
 }
 
 bool decoded_content_cache_enabled() {
@@ -1314,6 +1344,11 @@ void TextureCache::begin_frame(
     upload_arenas_[frame_slot].active_chunk = 0;
     upload_arenas_[frame_slot].cursor = 0;
     current_frame_slot_ = frame_slot;
+    // "Load/Prefetch Custom Textures" changes (and the first frame) index the pack again; textures
+    // decoded or replaced under the previous settings are dropped, as Dolphin does.
+    if (custom_texture_library().configure(custom_texture_settings_from_config()) && !entries_.empty()) {
+        invalidate_all();
+    }
 }
 
 bool TextureCache::preallocate_upload_arenas(unsigned frames_in_flight) {
@@ -1426,7 +1461,11 @@ void TextureCache::decoded_lru_track(const Key& key) {
 }
 
 void TextureCache::decoded_lru_evict_to_budget() {
-    const std::uint64_t budget = decoded_resident_budget_bytes();
+    // Custom textures share the LRU with a budget of their own on top.
+    const std::uint64_t decoded_budget = decoded_resident_budget_bytes();
+    const std::uint64_t custom_budget = custom_texture_library().active() ? custom_texture_budget_bytes() : 0u;
+    const std::uint64_t budget = decoded_budget > std::numeric_limits<std::uint64_t>::max() - custom_budget
+        ? std::numeric_limits<std::uint64_t>::max() : decoded_budget + custom_budget;
     if (decoded_resident_bytes_ <= budget) {
         return;
     }
@@ -1521,6 +1560,99 @@ bool TextureCache::take_pooled_texture(
         return true;
     }
     return false;
+}
+
+TextureHandle TextureCache::upload_custom_texture(const Key& key, const TexImage& image,
+    std::uint32_t guest_byte_size, const CustomTextureData& data) {
+    if (upload_list_ == nullptr) {
+        throw std::runtime_error("[TextureCache] get: no upload command list set");
+    }
+    const unsigned levels = static_cast<unsigned>(data.levels.size());
+    D3D12_RESOURCE_DESC rd{};
+    rd.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    rd.Width = data.levels.front().width;
+    rd.Height = data.levels.front().height;
+    rd.DepthOrArraySize = 1;
+    rd.MipLevels = static_cast<UINT16>(levels);
+    rd.Format = custom_texture_dxgi_format(data.format);
+    rd.SampleDesc.Count = 1;
+    rd.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+
+    // The staging copy follows the device's footprints (block rows for BC formats).
+    std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> layouts(levels);
+    std::vector<UINT> rows(levels);
+    std::vector<UINT64> row_sizes(levels);
+    UINT64 total = 0;
+    device_->GetCopyableFootprints(&rd, 0, levels, 0, layouts.data(), rows.data(), row_sizes.data(), &total);
+    const UploadAllocation staging = allocate_upload_bytes(total, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
+    if (staging.cpu_base == nullptr) {
+        throw std::runtime_error("[TextureCache] upload arena is not mapped");
+    }
+    std::uint8_t* const base = staging.cpu_base + staging.offset;
+    for (unsigned l = 0; l < levels; ++l) {
+        const CustomTextureLevel& level = data.levels[l];
+        const std::size_t row_bytes = std::min<std::size_t>(level.row_bytes, static_cast<std::size_t>(row_sizes[l]));
+        const UINT row_count = std::min<UINT>(rows[l], level.rows);
+        for (UINT r = 0; r < row_count; ++r) {
+            std::memcpy(base + layouts[l].Offset + std::size_t{r} * layouts[l].Footprint.RowPitch,
+                data.bytes.data() + level.offset + std::size_t{r} * level.row_bytes, row_bytes);
+        }
+    }
+
+    ComPtr<ID3D12Resource> resource;
+    std::uint64_t allocation_bytes = 0;
+    d3d_check(texture_heap_.create(rd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, resource, allocation_bytes),
+        "create custom texture");
+    for (unsigned l = 0; l < levels; ++l) {
+        D3D12_TEXTURE_COPY_LOCATION copy_dst{};
+        copy_dst.pResource = resource.Get();
+        copy_dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        copy_dst.SubresourceIndex = l;
+        D3D12_TEXTURE_COPY_LOCATION copy_src{};
+        copy_src.pResource = staging.resource;
+        copy_src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        copy_src.PlacedFootprint = layouts[l];
+        copy_src.PlacedFootprint.Offset += staging.offset;
+        upload_list_->CopyTextureRegion(&copy_dst, 0, 0, 0, &copy_src, nullptr);
+    }
+    D3D12_RESOURCE_BARRIER bar{};
+    bar.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    bar.Transition.pResource = resource.Get();
+    bar.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    bar.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    bar.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    upload_list_->ResourceBarrier(1, &bar);
+
+    const UINT srv_idx = allocate_srv_index();
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{};
+    srv_desc.Format = rd.Format;
+    srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srv_desc.Texture2D.MipLevels = levels;
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu = srv_cpu_base_;
+    cpu.ptr += static_cast<SIZE_T>(srv_idx) * srv_stride_;
+    device_->CreateShaderResourceView(resource.Get(), &srv_desc, cpu);
+
+    TextureHandle handle{};
+    handle.resource = resource.Get();
+    handle.srv_index = srv_idx;
+    handle.width = static_cast<std::uint16_t>(rd.Width);
+    handle.height = static_cast<std::uint16_t>(rd.Height);
+    handle.mip_levels = static_cast<std::uint8_t>(levels);
+    handle.guest_byte_size = guest_byte_size;
+    handle.custom = true;
+    handle.arbitrary_mips = data.arbitrary_mipmaps;
+    handle.custom_scale = static_cast<float>(rd.Width) / static_cast<float>(image.width);
+
+    Entry entry{};
+    entry.texture = std::move(resource);
+    entry.allocation_bytes = allocation_bytes;
+    entry.handle = handle;
+    if (entries_.empty()) decoded_guest_envelope_.clear();
+    decoded_guest_envelope_.include(image.guest_addr, guest_byte_size);
+    entries_.emplace(key, std::move(entry));
+    decoded_lru_track(key);
+    return handle;
 }
 
 void TextureCache::retire(Entry&& entry) {
@@ -2228,6 +2360,45 @@ TextureHandle TextureCache::get(
             std::span<const std::byte>(guest_bytes, total_guest_size));
     }
     const auto* src = reinterpret_cast<const std::uint8_t*>(guest_bytes);
+    // Custom textures: the texture's Dolphin name selects a replacement from the pack.
+    // GALAXY_CUSTOM_TEXTURE_NAME_LOG=<file> lists every distinct name this session decodes, one
+    // per line (pack authoring and matching diagnostics).
+    static const std::string name_log = [] {
+        const char* value = std::getenv("GALAXY_CUSTOM_TEXTURE_NAME_LOG");
+        return std::string(value != nullptr ? value : "");
+    }();
+    CustomTextureLibrary& custom_library = custom_texture_library();
+    if (custom_library.active() || !name_log.empty()) {
+        const std::uint32_t level0_size = texture_guest_byte_size(image.format, w, h, 1u);
+        const CustomTextureName name = dolphin_texture_name(image.format, w, h,
+            (static_cast<unsigned>(mode.min_filter) & 0x3u) != 0u,
+            std::span<const std::uint8_t>(src, level0_size),
+            std::span<const std::uint8_t>(tlut_bank_ + tlut_byte_offset, required_palette_bytes));
+        if (!name_log.empty()) {
+            static std::mutex log_mutex;
+            static std::set<std::string> logged;
+            std::lock_guard lock(log_mutex);
+            if (logged.insert(name.full()).second) {
+                if (FILE* file = std::fopen(name_log.c_str(), "a")) {
+                    std::fprintf(file, "%s\n", name.full().c_str());
+                    std::fclose(file);
+                }
+            }
+        }
+        if (const auto replacement = custom_library.find(name)) {
+            const CustomTextureLevel& top = replacement->levels.front();
+            // Dolphin's rule: a replacement keeps the game texture's aspect ratio.
+            if (std::uint64_t{top.width} * h == std::uint64_t{top.height} * w && top.width <= 16384u &&
+                top.height <= 16384u) {
+                return upload_custom_texture(key, image, total_guest_size, *replacement);
+            }
+            static std::set<std::string> rejected;
+            if (rejected.insert(name.full()).second) {
+                std::cerr << "[custom-textures] " << name.full() << ": " << top.width << "x" << top.height
+                          << " does not keep the game texture's " << w << "x" << h << " aspect ratio\n";
+            }
+        }
+    }
     std::optional<ContentKey> content_key;
     if (decoded_content_cache_enabled() &&
         !debug_invalidate_every_frame && total_guest_size != 0u &&
