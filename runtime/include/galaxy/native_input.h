@@ -297,6 +297,15 @@ struct NativeHidIoClock {
     void* user{};
 };
 
+// The physical device under a backend. `attachments` counts the devices
+// attached so far (0 until the first, and always 0 for a backend that keeps one
+// device for its whole life, as the Windows HID handle does); `attached` says
+// whether one is attached now.
+struct NativeHidDeviceLink {
+    std::uint64_t attachments{};
+    bool attached{};
+};
+
 // Blocking platform HID work is isolated behind this interface. Production
 // uses the Windows HID backend; deterministic tests inject a fake backend.
 // `poll_input` must be nonblocking once `open` returns. Read and write may run
@@ -314,6 +323,37 @@ public:
         std::span<const std::byte> report) = 0;
     virtual void request_stop() noexcept = 0;
     virtual void close() noexcept = 0;
+    // A backend whose device can go away and come back (the macOS Wii Remote
+    // bridge) reports it here. Must be thread-safe: the guest thread asks
+    // while the worker's threads run.
+    [[nodiscard]] virtual NativeHidDeviceLink device_link() const noexcept {
+        return {};
+    }
+};
+
+// Whether the guest's Bluetooth link to a real Wii Remote still has its
+// physical remote. A guest link is bound to the remote attached when it is
+// first observed connected, and must end when that remote goes away or is
+// replaced; while a remote that was attached is not, the guest must not be
+// offered a new link. A backend that does not report links never acts.
+enum class NativeHidLinkAction : std::uint8_t {
+    None,
+    TearDown,
+};
+
+class NativeHidLinkTracker {
+public:
+    [[nodiscard]] NativeHidLinkAction observe(
+        bool guest_connected,
+        const NativeHidDeviceLink& link) noexcept;
+    [[nodiscard]] static bool hold_reconnect(
+        const NativeHidDeviceLink& link) noexcept {
+        return link.attachments != 0u && !link.attached;
+    }
+    void reset() noexcept { bound_attachment_ = 0u; }
+
+private:
+    std::uint64_t bound_attachment_{};  // 0 while no guest link is bound
 };
 
 struct NativeHidIoWorkerStats {
@@ -328,6 +368,7 @@ struct NativeHidIoWorkerStats {
     std::size_t maximum_pending_output_reports{};
     std::uint64_t output_reports_enqueued{};
     std::uint64_t output_reports_completed{};
+    std::uint64_t output_reports_discarded{};
     NativeNewestOnlyHidFifoStats input{};
 };
 
@@ -372,6 +413,10 @@ public:
     [[nodiscard]] NativeHidIoTakeResult take_latest_input(
         std::size_t maximum_report_bytes);
     void discard_input_on_reset();
+    // Drops the output reports queued for a device link that ended; one already
+    // being written completes.
+    void discard_output_on_reset();
+    [[nodiscard]] NativeHidDeviceLink device_link() const noexcept;
     [[nodiscard]] bool input_occupied() const noexcept;
     [[nodiscard]] NativeHidIoWorkerStats stats() const noexcept;
     void throw_if_failed() const;

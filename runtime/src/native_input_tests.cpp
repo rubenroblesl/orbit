@@ -309,6 +309,7 @@ struct FakeNativeHidState {
     bool release_second_poll{};
     std::deque<std::vector<std::byte>> input_reports;
     std::vector<std::vector<std::byte>> output_reports;
+    galaxy::input::NativeHidDeviceLink link{};
 };
 
 class FakeNativeHidBackend final
@@ -385,6 +386,11 @@ public:
         std::lock_guard<std::mutex> lock(state_->mutex);
         state_->closed = true;
         state_->wake.notify_all();
+    }
+
+    galaxy::input::NativeHidDeviceLink device_link() const noexcept override {
+        std::lock_guard<std::mutex> lock(state_->mutex);
+        return state_->link;
     }
 
 private:
@@ -3279,6 +3285,112 @@ bool native_hid_io_worker_hard_fails_bounded_output_overflow() {
     return passed;
 }
 
+bool native_hid_io_worker_discards_output_of_an_ended_link() {
+    auto state = std::make_shared<FakeNativeHidState>();
+    state->block_writes = true;
+    galaxy::input::NativeHidIoWorker worker(
+        std::make_unique<FakeNativeHidBackend>(state), 4u, 1u);
+    worker.start();
+    bool passed = expect(
+        wait_until([&] { return worker.stats().opened; }),
+        "fake HID backend opens before the output discard test");
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->link = {1u, false};
+    }
+    const galaxy::input::NativeHidDeviceLink link = worker.device_link();
+    passed &= expect(
+        link.attachments == 1u && !link.attached,
+        "the worker reports its backend's device link");
+
+    worker.enqueue_output(fake_output_report(1u));
+    passed &= expect(
+        wait_until([&] { return worker.stats().output_in_flight; }),
+        "first output is in flight when the device link ends");
+    worker.enqueue_output(fake_output_report(2u));
+    worker.enqueue_output(fake_output_report(3u));
+    worker.discard_output_on_reset();
+    const auto discarded = worker.stats();
+    passed &= expect(
+        discarded.pending_output_reports == 0u &&
+            discarded.output_reports_discarded == 2u &&
+            discarded.output_reports_enqueued == 3u,
+        "an ended link's queued output is discarded and counted");
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->block_writes = false;
+        state->wake.notify_all();
+    }
+    passed &= expect(
+        wait_until([&] {
+            return worker.stats().output_reports_completed == 1u;
+        }),
+        "the output already in flight completes");
+    worker.enqueue_output(fake_output_report(4u));
+    passed &= expect(
+        wait_until([&] {
+            return worker.stats().output_reports_completed == 2u;
+        }),
+        "output for the next device link flows");
+    std::vector<std::vector<std::byte>> written;
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        written = state->output_reports;
+    }
+    passed &= expect(
+        written.size() == 2u && written[0] == fake_output_report(1u) &&
+            written[1] == fake_output_report(4u),
+        "only the in-flight and later output reports reach the device");
+    worker.stop();
+    return passed;
+}
+
+bool native_hid_link_tracker_ends_and_holds_guest_links() {
+    using galaxy::input::NativeHidLinkAction;
+    using galaxy::input::NativeHidLinkTracker;
+    using Link = galaxy::input::NativeHidDeviceLink;
+    NativeHidLinkTracker tracker;
+    bool passed = expect(
+        tracker.observe(true, Link{}) == NativeHidLinkAction::None &&
+            !NativeHidLinkTracker::hold_reconnect(Link{}),
+        "a backend without device links never ends or holds a guest link");
+    passed &= expect(
+        tracker.observe(true, Link{0u, false}) == NativeHidLinkAction::None,
+        "nothing ends while the first device is still being discovered");
+    passed &= expect(
+        tracker.observe(true, Link{1u, true}) == NativeHidLinkAction::None &&
+            tracker.observe(true, Link{1u, true}) ==
+                NativeHidLinkAction::None,
+        "a connected guest link binds to the attached device and keeps it");
+    passed &= expect(
+        tracker.observe(true, Link{1u, false}) ==
+            NativeHidLinkAction::TearDown,
+        "a guest link whose device went away ends");
+    passed &= expect(
+        NativeHidLinkTracker::hold_reconnect(Link{1u, false}) &&
+            tracker.observe(false, Link{1u, false}) ==
+                NativeHidLinkAction::None,
+        "no new guest link is offered while no device is attached");
+    passed &= expect(
+        !NativeHidLinkTracker::hold_reconnect(Link{2u, true}) &&
+            tracker.observe(true, Link{2u, true}) ==
+                NativeHidLinkAction::None,
+        "a device that came back admits a new guest link bound to it");
+    passed &= expect(
+        tracker.observe(true, Link{3u, true}) ==
+            NativeHidLinkAction::TearDown,
+        "a guest link whose device was replaced between polls ends");
+    passed &= expect(
+        tracker.observe(true, Link{3u, true}) == NativeHidLinkAction::None,
+        "the next guest link binds to the replacement");
+    tracker.reset();
+    passed &= expect(
+        tracker.observe(true, Link{3u, false}) ==
+            NativeHidLinkAction::TearDown,
+        "a guest link that connects while no device is attached ends");
+    return passed;
+}
+
 bool native_hid_io_worker_publishes_async_discovery_failure() {
     auto state = std::make_shared<FakeNativeHidState>();
     state->fail_open = true;
@@ -3719,6 +3831,8 @@ int main() {
     ok &= native_hid_io_worker_cancels_blocked_discovery_on_stop();
     ok &= native_hid_io_worker_hard_fails_bounded_output_overflow();
     ok &= native_hid_io_worker_publishes_async_discovery_failure();
+    ok &= native_hid_io_worker_discards_output_of_an_ended_link();
+    ok &= native_hid_link_tracker_ends_and_holds_guest_links();
     ok &= native_hid_logical_epoch_preserves_hardware_deadline();
     ok &= native_hid_cadence_epochs_reject_stale_samples();
     return ok ? 0 : 1;

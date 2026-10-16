@@ -693,6 +693,7 @@ struct NativeHidIoWorker::Impl {
     std::size_t maximum_observed_pending_output_reports{};
     std::uint64_t output_reports_enqueued{};
     std::uint64_t output_reports_completed{};
+    std::uint64_t output_reports_discarded{};
     bool started{};
     bool opened{};
     bool failed{};
@@ -846,6 +847,20 @@ void NativeHidIoWorker::discard_input_on_reset() {
     impl_->input_fifo.discard_on_reset();
 }
 
+void NativeHidIoWorker::discard_output_on_reset() {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    const std::uint64_t discarded = impl_->pending_output_reports.size();
+    checked_add(
+        impl_->output_reports_discarded,
+        discarded,
+        "native HID output discard counter overflowed");
+    impl_->pending_output_reports.clear();
+}
+
+NativeHidDeviceLink NativeHidIoWorker::device_link() const noexcept {
+    return impl_->backend->device_link();
+}
+
 bool NativeHidIoWorker::input_occupied() const noexcept {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     return impl_->input_fifo.occupied();
@@ -865,7 +880,32 @@ NativeHidIoWorkerStats NativeHidIoWorker::stats() const noexcept {
         impl_->maximum_observed_pending_output_reports,
         impl_->output_reports_enqueued,
         impl_->output_reports_completed,
+        impl_->output_reports_discarded,
         impl_->input_fifo.stats()};
+}
+
+NativeHidLinkAction NativeHidLinkTracker::observe(
+    bool guest_connected,
+    const NativeHidDeviceLink& link) noexcept {
+    if (link.attachments == 0u || !guest_connected) {
+        bound_attachment_ = 0u;
+        return NativeHidLinkAction::None;
+    }
+    if (!link.attached) {
+        bound_attachment_ = 0u;
+        return NativeHidLinkAction::TearDown;
+    }
+    if (bound_attachment_ == 0u) {
+        bound_attachment_ = link.attachments;
+        return NativeHidLinkAction::None;
+    }
+    if (bound_attachment_ != link.attachments) {
+        // Removed and attached again between two observations: the remote
+        // under the guest link lost the guest's setup.
+        bound_attachment_ = 0u;
+        return NativeHidLinkAction::TearDown;
+    }
+    return NativeHidLinkAction::None;
 }
 
 void NativeHidIoWorker::throw_if_failed() const {
