@@ -10,10 +10,7 @@
 #include <emmintrin.h>
 #endif
 
-extern "C" {
-#include "platform.h"
-#include "softfloat.h"
-}
+#include "galaxy/softfloat_include.h"
 
 namespace galaxy {
 namespace {

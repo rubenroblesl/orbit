@@ -8,7 +8,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <system_error>
 
@@ -65,12 +67,20 @@ parse_diagnostic_stick_command(std::string_view text) noexcept {
                result.ptr == field.data() + field.size();
     };
     const auto axis = [](std::string_view field, float& value) {
+#if defined(__APPLE__)
+        // libc++'s floating-point from_chars needs macOS 26; the port runs on macOS 14.
+        const std::string text(field);
+        char* end = nullptr;
+        value = std::strtof(text.c_str(), &end);
+        const bool parsed = !text.empty() && end == text.c_str() + text.size();
+#else
         const auto result = std::from_chars(
             field.data(), field.data() + field.size(), value,
             std::chars_format::general);
-        return result.ec == std::errc{} &&
-               result.ptr == field.data() + field.size() &&
-               std::isfinite(value) && value >= -1.0f && value <= 1.0f;
+        const bool parsed = result.ec == std::errc{} &&
+                            result.ptr == field.data() + field.size();
+#endif
+        return parsed && std::isfinite(value) && value >= -1.0f && value <= 1.0f;
     };
     if (!decimal(fields[0], command.sequence) || command.sequence == 0u ||
         !decimal(fields[1], command.duration_ms) || command.duration_ms > 2000u ||

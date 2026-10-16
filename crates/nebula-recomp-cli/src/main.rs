@@ -336,7 +336,6 @@ enum Command {
         output: PathBuf,
     },
     /// Build the installed content package (game.pak and loose partition files).
-    #[cfg(target_os = "windows")]
     PackageContent {
         /// Extracted RMGE01 game folder (DATA root or its parent).
         game: PathBuf,
@@ -415,12 +414,11 @@ enum Command {
         #[arg(long)]
         coef: Option<PathBuf>,
     },
-    /// Build a sparse game.pak from an extracted RMGE01 disc image (Windows only).
+    /// Build a sparse game.pak from an extracted RMGE01 disc image.
     ///
-    /// game.pak is a single contiguous sparse NTFS file where every game asset
+    /// game.pak is a single contiguous sparse file where every game asset
     /// resides at its exact partition-relative disc byte offset.  NebulaRuntime
     /// memory-maps it so DVDLowRead is a single O(1) pointer-add at runtime.
-    #[cfg(target_os = "windows")]
     BuildPak {
         /// Path to the extracted game directory (the folder containing DATA/).
         input: PathBuf,
@@ -433,7 +431,6 @@ enum Command {
     /// The image contains only validated initialized DOL section bytes, their
     /// guest destinations, and the zero-before-copy BSS range. It is installer
     /// data, not a runtime PPC decoder, interpreter, JIT, or executable loader.
-    #[cfg(target_os = "windows")]
     BuildBootImage {
         /// Exact supported RMGE01 extracted game directory.
         input: PathBuf,
@@ -1134,13 +1131,10 @@ fn main() -> Result<()> {
             let data = generate::resolve_game_data_root(&game)?;
             generate::generate_dsp(&data, &output)?;
         }
-        #[cfg(target_os = "windows")]
         Command::PackageContent { game, output } => generate::package_content(&game, &output)?,
-        #[cfg(target_os = "windows")]
         Command::BuildPak { input, output } => {
             build_pak::run(&input, &output)?;
         }
-        #[cfg(target_os = "windows")]
         Command::BuildBootImage { input, output } => {
             build_boot_image::run(&input, &output)?;
         }
@@ -2407,11 +2401,9 @@ mod tests {
     }
 }
 
-#[cfg(target_os = "windows")]
 #[path = "build_boot_image.rs"]
 mod build_boot_image;
 
-#[cfg(target_os = "windows")]
 #[path = "build_pak.rs"]
 mod build_pak;
 

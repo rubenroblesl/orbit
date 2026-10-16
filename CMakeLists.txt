@@ -1,8 +1,12 @@
 cmake_minimum_required(VERSION 3.24)
+# The macOS port runs on macOS 14 and later (the Mac launcher's minimum too).
+if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS version" FORCE)
+endif()
 project(NebulaRuntime VERSION 1.0.0 LANGUAGES C CXX)
 
-if(NOT WIN32)
-    message(FATAL_ERROR "The first runtime milestone targets Windows x64 only.")
+if(NOT WIN32 AND NOT APPLE)
+    message(FATAL_ERROR "Nebula targets Windows x64 and macOS on Apple silicon.")
 endif()
 
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -223,6 +227,13 @@ list(
     "${SOFTFLOAT_ROOT}/source/8086-SSE/"
 )
 list(TRANSFORM SOFTFLOAT_SPECIALIZE_NAMES APPEND ".c")
+
+# The macOS build (Metal, Core Audio, Game Controller) defines its own targets.
+if(APPLE)
+    include(cmake/NebulaMacOS.cmake)
+    return()
+endif()
+
 add_library(
     galaxy_softfloat
     STATIC
@@ -677,6 +688,7 @@ add_library(galaxy_gx STATIC
     runtime/src/gx/line_point_raster.cpp
     runtime/src/gx/pipeline_cache.cpp
     runtime/src/gx/shader_gen.cpp
+    runtime/src/gx/custom_textures.cpp
     runtime/src/gx/uber_shaders.cpp
     ${galaxy_uber_embed_cpp}
     runtime/src/gx/post_process.cpp
@@ -721,6 +733,8 @@ target_include_directories(galaxy_gx
     PRIVATE
         "${galaxy_post_dir}"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/smaa"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/xxhash"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb"
 )
 if(MSVC)
     target_compile_options(galaxy_gx PRIVATE /GS- /GR- /Oi /favor:INTEL64)

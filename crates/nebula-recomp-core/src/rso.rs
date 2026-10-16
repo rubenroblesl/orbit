@@ -1471,8 +1471,9 @@ fn native_sidecar_cmake() -> String {
     r##"cmake_minimum_required(VERSION 3.24)
 project(RMGE01HomeButtonNative LANGUAGES CXX)
 
-if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
-    message(FATAL_ERROR "RMGE01 native sidecar requires Windows x64")
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR
+   NOT (WIN32 OR (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")))
+    message(FATAL_ERROR "RMGE01 native sidecar requires Windows x64 or macOS on Apple silicon")
 endif()
 if(NOT DEFINED GALAXY_RUNTIME_INCLUDE OR
    NOT DEFINED GALAXY_PPC_FLOAT_LIBRARY OR
@@ -1551,6 +1552,17 @@ if(MSVC)
     if(galaxy_native_isa_effective STREQUAL "AVX2")
         target_compile_options(RMGE01_home_button PRIVATE /arch:AVX2)
     endif()
+endif()
+if(APPLE)
+    # The clang-cl semantics above. The single resume-label function builds at -O0 (or -O1).
+    option(GALAXY_HOME_BUTTON_OPT "Optimize the Home Button RSO with -O1 instead of -O0" OFF)
+    if(GALAXY_HOME_BUTTON_OPT)
+        target_compile_options(RMGE01_home_button PRIVATE -w -fno-rtti -ffp-contract=off -fwrapv -fno-strict-aliasing -O1)
+    else()
+        target_compile_options(RMGE01_home_button PRIVATE -w -fno-rtti -ffp-contract=off -fwrapv -fno-strict-aliasing -O0)
+    endif()
+    target_compile_definitions(RMGE01_home_button PRIVATE GALAXY_FASTMEM_UNAVAILABLE=1)
+    target_link_options(RMGE01_home_button PRIVATE "LINKER:-exported_symbol,_galaxy_*")
 endif()
 "##
     .to_owned()

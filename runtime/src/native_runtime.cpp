@@ -1,4 +1,5 @@
 #include "galaxy/native_api.h"
+#include "galaxy/product.h"
 #include "nebula_build_identity.h"
 #include "galaxy/ai_dma_timing.h"
 #include "galaxy/checkpoint_gate.h"
@@ -46,13 +47,22 @@
 #define NOMINMAX
 #include <Windows.h>
 #include <bcrypt.h>
+#if defined(_WIN32)
 #include <DbgHelp.h>
 #include <TlHelp32.h>
+#include <Psapi.h>
+#else
+#include <csignal>
+#include <execinfo.h>
+#include <signal.h>
+#include <unistd.h>
+#endif
 #include <Shellapi.h>
 #include <timeapi.h>
 
 #include "galaxy/windows_power.h"
 #include "galaxy/frame_timeline.h"
+#include "galaxy/host_fpu.h"
 
 #include <algorithm>
 #include <array>
@@ -76,7 +86,6 @@
 #include <iomanip>
 #include <initializer_list>
 #include <intrin.h>
-#include <Psapi.h>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -111,12 +120,20 @@ void prefetch_module_image_async(HMODULE module) noexcept {
                  length == 2u && value[0] == '0');
     }();
     if (!enabled || module == nullptr) return;
+#if defined(_WIN32)
     const auto* base = reinterpret_cast<const unsigned char*>(module);
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
     if (dos->e_magic != IMAGE_DOS_SIGNATURE) return;
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE) return;
     const SIZE_T size = nt->OptionalHeader.SizeOfImage;
+#else
+    // A dlopen handle is not the image address: find the Mach-O image through an export and
+    // prefetch its __TEXT segment, which holds the translated code.
+    const unsigned char* base = nullptr;
+    SIZE_T size = 0;
+    if (!galaxy::host::macos_module_text_range(module, base, size)) return;
+#endif
     try {
         std::thread([base, size] {
             (void)SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
@@ -762,6 +779,7 @@ bool native_thp_async_decode_enabled() {
 //   - blocked samples by the innermost runtime frame (the wait site).
 // Printed at shutdown as [sim-profile*] lines; runtime and system addresses resolve through dbghelp
 // when NebulaRuntime.pdb sits beside the executable.
+#if defined(_WIN32)
 class SimulationProfiler {
 public:
     ~SimulationProfiler() {
@@ -1283,6 +1301,24 @@ private:
     bool symbols_attempted_ = false;
     bool symbols_ready_ = false;
 };
+#else
+// The sampler suspends the simulation thread and unwinds it with the Windows x64 unwind tables.
+// On macOS, sample the process with Instruments or `sample` instead.
+class SimulationProfiler {
+public:
+    void start(const galaxy::FunctionRecordV1*, std::size_t, HMODULE) { report_unavailable(); }
+    void start_named(const wchar_t*, std::string) { report_unavailable(); }
+    void stop_and_print(std::ostream&) {}
+
+private:
+    static void report_unavailable() {
+        static std::once_flag once;
+        std::call_once(once, [] {
+            std::cerr << "[sim-profile] unavailable on macOS; use Instruments or `sample`\n";
+        });
+    }
+};
+#endif
 
 SimulationProfiler g_sim_profiler;
 // The loaded module's function records (guest address, native entry), for
@@ -21764,7 +21800,7 @@ std::uint32_t guest_r1_owner_thread(
     return guest_r1_owner_thread_impl<false>(memory, services, r1);
 }
 
-__declspec(noinline) std::uint32_t resolve_guest_stack_owner_thread_slow(
+GALAXY_NOINLINE std::uint32_t resolve_guest_stack_owner_thread_slow(
     RuntimeState& state,
     galaxy::GuestMemoryV1* memory,
     std::uint32_t r1,
@@ -31539,6 +31575,7 @@ static_assert(!parse_unsigned_decimal(L"-1") && !parse_unsigned_decimal(L"+1"));
 static_assert(!parse_unsigned_decimal(L" 1") && !parse_unsigned_decimal(L"1ms"));
 static_assert(!parse_unsigned_decimal(L""));
 
+#if defined(_WIN32)
 static wchar_t g_crash_dump_dir[MAX_PATH]{};
 static bool g_crash_dump_full = false;
 
@@ -31735,6 +31772,66 @@ static void disable_runtime_dialogs() {
     }
     SetErrorMode(error_mode);
 }
+#else
+// macOS: a fatal signal prints the faulting address and a symbolized backtrace; the system crash
+// reporter keeps the full report in ~/Library/Logs/DiagnosticReports.
+static void galaxy_print_backtrace() {
+    void* frames[64];
+    const int count = backtrace(frames, 64);
+    backtrace_symbols_fd(frames, count, STDERR_FILENO);
+}
+
+static void galaxy_fatal_signal_handler(int signal_number, siginfo_t* info, void*) {
+    galaxy::host::stop_all_rumble();
+    char line[192];
+    const int length = std::snprintf(line, sizeof(line),
+        "[crash] signal %d at address %p; fastmem: %s\n", signal_number,
+        info != nullptr ? info->si_addr : nullptr,
+        galaxy::host::flat_guest_memory::last_unhandled_fault_message());
+    if (length > 0) (void)write(STDERR_FILENO, line, static_cast<std::size_t>(length));
+    galaxy_print_backtrace();
+    std::signal(signal_number, SIG_DFL);
+    std::raise(signal_number);
+}
+
+static void galaxy_terminate_handler() {
+    std::fprintf(stderr, "[crash] std::terminate() called");
+    if (const std::exception_ptr eptr = std::current_exception()) {
+        try {
+            std::rethrow_exception(eptr);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, " -- active exception: %s", e.what());
+        } catch (...) {
+            std::fprintf(stderr, " -- active exception of unknown type");
+        }
+    } else {
+        std::fprintf(stderr, " -- no active exception (noexcept violation, "
+                              "double exception, or a raw abort() call)");
+    }
+    std::fprintf(stderr, "\n");
+    std::fflush(stderr);
+    galaxy_print_backtrace();
+    std::signal(SIGABRT, SIG_DFL);
+    std::abort();
+}
+
+static void disable_runtime_dialogs() {
+    // The handler runs on its own stack so a guest-thread stack overflow still reports.
+    static std::array<std::byte, 256u * 1024u> alternate_stack;
+    stack_t stack{};
+    stack.ss_sp = alternate_stack.data();
+    stack.ss_size = alternate_stack.size();
+    (void)sigaltstack(&stack, nullptr);
+    struct sigaction action{};
+    action.sa_sigaction = &galaxy_fatal_signal_handler;
+    action.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sigemptyset(&action.sa_mask);
+    for (const int signal_number : {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP}) {
+        (void)sigaction(signal_number, &action, nullptr);
+    }
+    std::set_terminate(galaxy_terminate_handler);
+}
+#endif
 
 static char const* priority_class_name(DWORD value) {
     switch (value) {
@@ -31830,6 +31927,7 @@ static void configure_runtime_scheduling() {
     report_effective_priorities();
 }
 
+#if defined(_WIN32)
 class ScopedSimulationCacheAffinity {
 public:
     void apply() {
@@ -31938,6 +32036,18 @@ private:
     }
     DWORD_PTR original_mask_ = 0;
 };
+#else
+// Apple silicon exposes no thread affinity; the scheduler keeps a QoS-interactive thread on the
+// performance cluster that shares the large L2.
+class ScopedSimulationCacheAffinity {
+public:
+    void apply() {
+        if (read_env_flag("GALAXY_SIMULATION_LARGEST_CACHE", false)) {
+            std::cerr << "[runtime] Simulation cache affinity unchanged: no affinity API on macOS\n";
+        }
+    }
+};
+#endif
 
 // Keeps the simulation thread in Windows' documented Games MMCSS class while
 // the process is running.  This is intentionally separate from the native
@@ -32047,7 +32157,7 @@ private:
 };
 
 static void configure_windows_game_identity() {
-    SetConsoleTitleW(L"Nebula");
+    SetConsoleTitleW(galaxy::kProductName);
 
     HMODULE shell32 = LoadLibraryW(L"shell32.dll");
     if (shell32 == nullptr) {
@@ -32117,7 +32227,11 @@ static RuntimeLaunchPaths default_runtime_launch_paths() {
     paths.module_path = get_env_path_w(L"GALAXY_MODULE_PATH");
     if (paths.module_path.empty()) {
         const std::filesystem::path sidecar_module =
+#if defined(__APPLE__)
+            exe_dir / "RMGE01_game.dylib";
+#else
             exe_dir / "RMGE01_game.dll";
+#endif
         const std::array module_candidates{
             sidecar_module,
             repo_root / "generated" / "native-module-proof-build" /
@@ -32141,6 +32255,10 @@ static RuntimeLaunchPaths default_runtime_launch_paths() {
 }
 
 static bool launch_settings_gui() {
+#if !defined(_WIN32)
+    // The macOS build has no separate launcher: settings live in the in-game overlay (F1).
+    return false;
+#else
     // A bare double-click on the runtime opens the Nebula launcher beside it.
     const std::filesystem::path exe_dir =
         current_executable_path().parent_path();
@@ -32162,6 +32280,7 @@ static bool launch_settings_gui() {
         return false;
     }
     return true;
+#endif
 }
 
 static void print_runtime_usage() {
@@ -32978,7 +33097,7 @@ int wmain(int argc, wchar_t** argv) {
         state.module_float_flags = float_flags_fn();
         if ((state.module_float_flags & galaxy::kModuleFloatFlagFastFloat) != 0u &&
             read_env_flag("GALAXY_FAST_FLOAT_FTZ_DAZ", true)) {
-            _mm_setcsr(_mm_getcsr() | 0x8040u);
+            galaxy::host_fpu::enable_flush_to_zero();
             state.fast_float_mxcsr = true;
         }
     }
@@ -33194,7 +33313,11 @@ int wmain(int argc, wchar_t** argv) {
     // install-time compiler emits this separate native DLL next to the game
     // module; require and validate it before the guest can reach the loader.
     const std::filesystem::path home_button_rso_path =
+#if defined(__APPLE__)
+        abs_module_path.parent_path() / L"RMGE01_home_button.dylib";
+#else
         abs_module_path.parent_path() / L"RMGE01_home_button.dll";
+#endif
     if (!std::filesystem::is_regular_file(home_button_rso_path)) {
         std::wcerr << L"[boot] Required Home Button native sidecar is missing: "
                    << home_button_rso_path.c_str() << L'\n';

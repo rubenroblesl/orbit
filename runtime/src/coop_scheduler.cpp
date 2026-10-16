@@ -6,7 +6,7 @@
 #endif
 #include <windows.h>
 
-#include <xmmintrin.h>
+#include "galaxy/host_fpu.h"
 
 #include <bit>
 #include <cstdio>
@@ -124,14 +124,14 @@ Scheduler::~Scheduler() {
 
 void Scheduler::attach_boot_fiber() {
     if (boot_handle_ != nullptr) return;
-    // Float switching keeps MXCSR (flush-to-zero, rounding) per fiber; new
+    // Float switching keeps the FP control state (flush-to-zero, rounding) per fiber; new
     // fibers start from the simulation thread's mode.
     boot_handle_ = ConvertThreadToFiberEx(nullptr, FIBER_FLAG_FLOAT_SWITCH);
     if (boot_handle_ == nullptr) {
         throw std::runtime_error(
             "ConvertThreadToFiberEx failed: " + std::to_string(GetLastError()));
     }
-    mxcsr_ = _mm_getcsr();
+    fp_control_ = host_fpu::read();
 }
 
 ChainState& Scheduler::running_chain() noexcept {
@@ -330,7 +330,7 @@ void __stdcall Scheduler::fiber_entry(void* parameter) {
     Scheduler* const scheduler = start->scheduler;
     const std::uint32_t thread = start->thread;
     delete start;
-    _mm_setcsr(scheduler->mxcsr_);
+    host_fpu::write(scheduler->fp_control_);
     try {
         scheduler->host_.run_new_thread(scheduler->host_.user, thread, scheduler->context_);
         throw std::runtime_error(

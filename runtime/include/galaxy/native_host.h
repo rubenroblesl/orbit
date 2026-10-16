@@ -1223,6 +1223,10 @@ private:
         const input::NativeHidPublishedBatch* published_batch = nullptr);
     [[nodiscard]] bool poll_real_wiimote_input_report();
     void ensure_real_wiimote_hid_worker_started();
+    // Ends the guest's link when its real Wii Remote goes away, and holds the
+    // next one until a remote is back (backends that report device links).
+    void service_real_wiimote_link();
+    [[nodiscard]] bool real_wiimote_reconnect_held() const;
     [[nodiscard]] bool virtual_wiimote_input_delivery_ready() const noexcept;
     void try_deliver_bluetooth_acl();
     void invalidate_virtual_wiimote_input_report(bool begin_logical_epoch);
@@ -1654,6 +1658,7 @@ private:
     std::optional<QueuedVirtualWiimoteInputReport>
         bt_virtual_input_report_;
     std::unique_ptr<input::NativeHidIoWorker> bt_real_input_worker_;
+    input::NativeHidLinkTracker bt_real_wiimote_link_{};
     static constexpr std::uint64_t kNativeInputMarioControlViUnset =
         ~std::uint64_t{0};
     std::atomic<std::uint64_t> native_input_first_mario_control_vi_{

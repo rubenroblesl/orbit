@@ -4,10 +4,12 @@ use std::{
     ffi::OsString,
     fs::{self, File, OpenOptions},
     io::{self, Write},
-    os::windows::ffi::OsStrExt,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
+#[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
     MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
 };
@@ -67,6 +69,7 @@ fn create_sibling_temp(output: &Path) -> Result<(PathBuf, File)> {
     )
 }
 
+#[cfg(windows)]
 fn wide_null(path: &Path) -> Vec<u16> {
     path.as_os_str()
         .encode_wide()
@@ -74,6 +77,7 @@ fn wide_null(path: &Path) -> Vec<u16> {
         .collect()
 }
 
+#[cfg(windows)]
 fn replace_atomically(temporary: &Path, output: &Path) -> Result<()> {
     let temporary_wide = wide_null(temporary);
     let output_wide = wide_null(output);
@@ -92,6 +96,28 @@ fn replace_atomically(temporary: &Path, output: &Path) -> Result<()> {
                 temporary.display()
             )
         });
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn replace_atomically(temporary: &Path, output: &Path) -> Result<()> {
+    // rename(2) replaces the destination atomically on the same volume. Flush the
+    // file first and then the directory entry, as MOVEFILE_WRITE_THROUGH does on Windows.
+    File::open(temporary)
+        .and_then(|file| file.sync_all())
+        .with_context(|| format!("failed to flush {}", temporary.display()))?;
+    fs::rename(temporary, output).with_context(|| {
+        format!(
+            "failed to atomically replace {} with {}",
+            output.display(),
+            temporary.display()
+        )
+    })?;
+    if let Some(parent) = output.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        File::open(parent)
+            .and_then(|directory| directory.sync_all())
+            .with_context(|| format!("failed to flush directory {}", parent.display()))?;
     }
     Ok(())
 }

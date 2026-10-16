@@ -139,6 +139,11 @@ if(MSVC)
         target_link_options(RMGE01_dsp PRIVATE "/EXPORT:${symbol}")
     endforeach()
 endif()
+if(APPLE)
+    # The DSP thread's hot loop, built at -O2 with the clang-cl semantics above.
+    target_compile_options(RMGE01_dsp PRIVATE -w -fno-rtti -ffp-contract=off -fwrapv -fno-strict-aliasing -O2)
+    target_link_options(RMGE01_dsp PRIVATE "LINKER:-exported_symbol,_galaxy_rmge01_dsp_entry*")
+endif()
 "#;
 
 /// Lower RMGE01's AX ucode with the bundled Dolphin free DSP ROMs.
@@ -231,7 +236,6 @@ pub fn generate_all(game: &Path, output: &Path) -> Result<()> {
     write_generated_text_create_new(&output.join("dsp").join("CMakeLists.txt"), DSP_CMAKE)?;
     write_generated_text_create_new(&output.join("CMakeLists.txt"), BUILD_CMAKE)?;
     println!("STEP 5/5 Building the boot image");
-    #[cfg(target_os = "windows")]
     crate::build_boot_image::run(game, &output.join("RMGE01_boot_image.bin"))?;
 
     // Report the options that were actually used, not a second copy of them. Literals
@@ -367,7 +371,6 @@ pub fn resolve_game_data_root(input: &Path) -> Result<std::path::PathBuf> {
 }
 
 /// Small partition files the runtime reads directly, next to game.pak.
-#[cfg(target_os = "windows")]
 const CONTENT_FILES: &[&str] = &[
     "sys/boot.bin",
     "sys/bi2.bin",
@@ -379,7 +382,6 @@ const CONTENT_FILES: &[&str] = &[
 
 /// Build the installed content package: a sparse game.pak plus the loose
 /// partition files the runtime opens directly. The source is only read.
-#[cfg(target_os = "windows")]
 pub fn package_content(game: &Path, output: &Path) -> Result<()> {
     if output.exists() {
         bail!(

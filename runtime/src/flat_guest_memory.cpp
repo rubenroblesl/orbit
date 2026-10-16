@@ -8,6 +8,7 @@
 // executable or deferred-read hooks yet, and strict unmapped failure. No handler commits an unmapped
 // guest page.
 
+#if defined(_WIN32)
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -15,6 +16,17 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#else
+// macOS: one shared-memory object per RAM bank, mapped once as the host view and once at each
+// guest alias inside a PROT_NONE reservation; faults arrive as SIGBUS/SIGSEGV.
+#include <errno.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
+#include <sys/mman.h>
+#include <sys/ucontext.h>
+#include <unistd.h>
+#endif
 
 #include <atomic>
 #include <cstdio>
@@ -28,6 +40,7 @@ namespace galaxy::host::flat_guest_memory {
 namespace {
 
 constexpr std::size_t kAllocationGranularity = 0x10000u;
+#if defined(_WIN32)
 constexpr DWORD kMemReplacePlaceholder = 0x00004000u;
 constexpr DWORD kMemReservePlaceholder = 0x00040000u;
 constexpr DWORD kMemPreservePlaceholder = 0x00000002u;
@@ -41,6 +54,12 @@ struct SharedSection {
     HANDLE mapping = nullptr;
     std::byte* host_view = nullptr;
 };
+#else
+struct SharedSection {
+    int descriptor = -1;
+    std::byte* host_view = nullptr;
+};
+#endif
 
 std::mutex g_init_mutex;
 std::atomic<bool> g_initialized{false};
@@ -50,6 +69,7 @@ std::byte* g_guest_base = nullptr;
 SharedSection g_mem1;
 SharedSection g_mem2;
 
+#if defined(_WIN32)
 [[noreturn]] void fail_win32(const char* operation) {
     std::ostringstream message;
     message << operation << " failed (GetLastError=" << GetLastError() << ')';
@@ -108,6 +128,46 @@ void map_guest_alias(
     }
 }
 
+#else
+[[noreturn]] void fail_posix(const char* operation) {
+    std::ostringstream message;
+    message << operation << " failed (errno=" << errno << ' ' << std::strerror(errno) << ')';
+    throw std::runtime_error(message.str());
+}
+
+SharedSection create_section(std::uint32_t size) {
+    // An unlinked POSIX shared-memory object: the descriptor keeps it alive, nothing else can open it.
+    char name[32];
+    std::snprintf(name, sizeof(name), "/nebula.ram.%d.%u", static_cast<int>(getpid()), size);
+    const int descriptor = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
+    if (descriptor < 0) {
+        fail_posix("shm_open for guest RAM");
+    }
+    (void)shm_unlink(name);
+    if (ftruncate(descriptor, size) != 0) {
+        (void)close(descriptor);
+        fail_posix("ftruncate for guest RAM");
+    }
+    void* const view = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, descriptor, 0);
+    if (view == MAP_FAILED) {
+        (void)close(descriptor);
+        fail_posix("mmap for host guest-RAM alias");
+    }
+    return SharedSection{descriptor, static_cast<std::byte*>(view)};
+}
+
+void map_guest_alias(const SharedSection& section, std::uint32_t guest_address, std::uint32_t size) {
+    auto* target = g_guest_base + guest_address;
+    void* const view = mmap(target, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, section.descriptor, 0);
+    if (view == MAP_FAILED) {
+        fail_posix("mmap exact guest alias");
+    }
+    if (view != target) {
+        throw std::runtime_error("mmap placed a guest alias away from its required address");
+    }
+}
+#endif
+
 std::byte* mapped_host_pointer(
     std::uint32_t guest_address,
     std::uint32_t size) noexcept {
@@ -143,6 +203,29 @@ void initialize() {
     }
     g_initialization_failed = true;
 
+#if !defined(_WIN32)
+    // The reservation is PROT_NONE address space: an access outside the six RAM aliases faults.
+    void* const requested = reinterpret_cast<void*>(kGuestBase);
+    void* const reservation = mmap(requested, static_cast<std::size_t>(kGuestSpaceSize + kAllocationGranularity),
+        PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (reservation == MAP_FAILED) {
+        fail_posix("mmap exact 4-GiB guest reservation");
+    }
+    if (reservation != requested) {
+        (void)munmap(reservation, static_cast<std::size_t>(kGuestSpaceSize + kAllocationGranularity));
+        throw std::runtime_error(
+            "mmap placed the guest reservation away from its required fixed base");
+    }
+    g_guest_base = static_cast<std::byte*>(reservation);
+    g_mem1 = create_section(kMem1Size);
+    g_mem2 = create_section(kMem2Size);
+    map_guest_alias(g_mem1, 0x00000000u, kMem1Size);
+    map_guest_alias(g_mem1, 0x80000000u, kMem1Size);
+    map_guest_alias(g_mem1, 0xC0000000u, kMem1Size);
+    map_guest_alias(g_mem2, 0x10000000u, kMem2Size);
+    map_guest_alias(g_mem2, 0x90000000u, kMem2Size);
+    map_guest_alias(g_mem2, 0xD0000000u, kMem2Size);
+#else
     HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
     if (kernelbase == nullptr) {
         kernelbase = LoadLibraryW(L"kernelbase.dll");
@@ -180,6 +263,7 @@ void initialize() {
     map_guest_alias(map_view_of_file3, g_mem2, 0x10000000u, kMem2Size);
     map_guest_alias(map_view_of_file3, g_mem2, 0x90000000u, kMem2Size);
     map_guest_alias(map_view_of_file3, g_mem2, 0xD0000000u, kMem2Size);
+#endif
 
     g_initialized.store(true, std::memory_order_release);
 }
@@ -254,6 +338,7 @@ void count_fault_page(std::uint32_t guest_address) noexcept {
     }
 }
 
+#if defined(_WIN32)
 // x86-64 memory-operand emulation for fastmem faults. Generated code accesses guest memory through plain
 // loads and stores that the compiler may fold into arithmetic, merge, forward or vectorize. A fault can land
 // on any instruction with one memory operand that clang emits for those templates: mov/movbe/movzx/movsx/movsxd
@@ -714,6 +799,8 @@ std::uint64_t alu(AluOp op, std::uint64_t a, std::uint64_t b, std::uint32_t size
     return result;
 }
 
+#endif  // defined(_WIN32)
+
 void note_unhandled(std::uint32_t guest_address, const std::uint8_t* code, const char* reason) noexcept {
     g_fault_unhandled.fetch_add(1u, std::memory_order_relaxed);
     std::snprintf(
@@ -741,6 +828,7 @@ bool fault_transfer(std::uint32_t guest_address, std::uint32_t size, bool write,
     return true;
 }
 
+#if defined(_WIN32)
 LONG WINAPI fastmem_vectored_handler(EXCEPTION_POINTERS* pointers) noexcept {
     EXCEPTION_RECORD* const record = pointers != nullptr ? pointers->ExceptionRecord : nullptr;
     CONTEXT* const context = pointers != nullptr ? pointers->ContextRecord : nullptr;
@@ -854,6 +942,9 @@ LONG WINAPI fastmem_vectored_handler(EXCEPTION_POINTERS* pointers) noexcept {
     context->Rip += access.length;
     return EXCEPTION_CONTINUE_EXECUTION;
 }
+#else
+#include "flat_guest_memory_aarch64.inc"
+#endif
 
 }  // namespace
 
@@ -861,10 +952,14 @@ void install_fault_handler(const FaultAccessCallbacks& callbacks) {
     const std::lock_guard<std::mutex> lock(g_init_mutex);
     g_fault_callbacks = callbacks;
     if (!g_fault_handler_installed.load(std::memory_order_acquire)) {
+#if defined(_WIN32)
         g_fault_handler_cookie = AddVectoredExceptionHandler(1u, &fastmem_vectored_handler);
         if (g_fault_handler_cookie == nullptr) {
             fail_win32("AddVectoredExceptionHandler for fastmem");
         }
+#else
+        install_fastmem_signal_handlers();
+#endif
         g_fault_handler_installed.store(true, std::memory_order_release);
     }
 }

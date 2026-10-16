@@ -1,5 +1,6 @@
 #include "galaxy/gx/render_config.h"
 #include "galaxy/atomic_file.h"
+#include "galaxy/product.h"
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -211,6 +212,14 @@ static void apply_kv(RenderConfig& cfg, const char* key, const char* val) {
     else if (std::strcmp(key, "aspect") == 0) {
         static constexpr const char* kNames[] = {"auto", "4:3", "16:10", "16:9", "21:9", "32:9"};
         cfg.aspect_mode = parse_choice(val, kNames, cfg.aspect_mode);
+    } else if (std::strcmp(key, "custom_textures") == 0) {
+        cfg.custom_textures = parse_bool(val, cfg.custom_textures);
+    } else if (std::strcmp(key, "prefetch_custom_textures") == 0) {
+        cfg.prefetch_custom_textures = parse_bool(val, cfg.prefetch_custom_textures);
+    } else if (std::strcmp(key, "custom_textures_dir") == 0) {
+        cfg.custom_textures_dir.fill('\0');
+        const std::size_t length = std::min(std::strlen(val), cfg.custom_textures_dir.size() - 1u);
+        std::memcpy(cfg.custom_textures_dir.data(), val, length);
     } else if (std::strcmp(key, "draw_distance") == 0) {
         static constexpr const char* kNames[] = {"original", "2x", "4x", "8x"};
         cfg.draw_distance = parse_choice(val, kNames, cfg.draw_distance);
@@ -218,7 +227,7 @@ static void apply_kv(RenderConfig& cfg, const char* key, const char* val) {
 }
 
 static void parse_ini(FILE* f, RenderConfig& cfg) {
-    char line[512];
+    char line[1024];
     while (std::fgets(line, sizeof(line), f)) {
         if (std::strchr(line, '\n') == nullptr && !std::feof(f)) {
             // A physical overlong record is ignored as a whole. Its suffix
@@ -227,7 +236,7 @@ static void parse_ini(FILE* f, RenderConfig& cfg) {
             do { c = std::fgetc(f); } while (c != '\n' && c != EOF);
             continue;
         }
-        char key_buf[128], val_buf[256];
+        char key_buf[128], val_buf[640];
         char* eq = std::strchr(line, '=');
         if (!eq) continue;
         if (static_cast<std::size_t>(eq - line) >= sizeof(key_buf) ||
@@ -241,7 +250,7 @@ static void parse_ini(FILE* f, RenderConfig& cfg) {
 }
 
 static void apply_env(RenderConfig& cfg, const char* env_name, const char* key) {
-    char value[128]{};
+    char value[640]{};
     std::size_t length = 0;
     if (getenv_s(&length, value, sizeof(value), env_name) == 0 &&
         length > 1) {
@@ -292,6 +301,9 @@ static void apply_env_overrides(RenderConfig& cfg) {
     apply_env(cfg, "GALAXY_MONITOR", "monitor");
     apply_env(cfg, "GALAXY_ASPECT", "aspect");
     apply_env(cfg, "GALAXY_DRAW_DISTANCE", "draw_distance");
+    apply_env(cfg, "GALAXY_CUSTOM_TEXTURES", "custom_textures");
+    apply_env(cfg, "GALAXY_PREFETCH_CUSTOM_TEXTURES", "prefetch_custom_textures");
+    apply_env(cfg, "GALAXY_CUSTOM_TEXTURES_DIR", "custom_textures_dir");
 }
 
 static void clamp_unimplemented_features(RenderConfig& cfg) {
@@ -321,6 +333,7 @@ static void clamp_unimplemented_features(RenderConfig& cfg) {
     cfg.aspect_mode = std::min(cfg.aspect_mode, kAspectModeCount - 1u);
     cfg.draw_distance = std::min(cfg.draw_distance, 3u);
     cfg.monitor.back() = '\0';
+    cfg.custom_textures_dir.back() = '\0';
     cfg.msaa_samples = 1;
     cfg.taa_enabled = false;
     cfg.ray_tracing_enabled = false;
@@ -395,7 +408,7 @@ static std::filesystem::path config_path() {
             nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, app_data))) {
         return {};
     }
-    return std::filesystem::path(app_data) / L"Nebula" / L"config.ini";
+    return std::filesystem::path(app_data) / galaxy::kAppDataFolder / L"config.ini";
 }
 
 }  // namespace
@@ -591,7 +604,10 @@ bool save_render_config_to_file() {
              << "fullscreen_height=" << cfg.fullscreen_height << '\n'
              << "fullscreen_refresh_hz=" << cfg.fullscreen_refresh_hz << '\n'
              << "aspect=" << cfg.aspect_mode << '\n'
-             << "draw_distance=" << cfg.draw_distance << '\n';
+             << "draw_distance=" << cfg.draw_distance << '\n'
+             << "custom_textures=" << (cfg.custom_textures ? 1u : 0u) << '\n'
+             << "prefetch_custom_textures=" << (cfg.prefetch_custom_textures ? 1u : 0u) << '\n'
+             << "custom_textures_dir=" << cfg.custom_textures_dir.data() << '\n';
     if (!contents) {
         return false;
     }

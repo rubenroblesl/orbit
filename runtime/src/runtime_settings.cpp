@@ -1,6 +1,7 @@
 #include "galaxy/runtime_settings.h"
 #include "galaxy/atomic_file.h"
 #include "galaxy/input_bindings.h"
+#include "galaxy/product.h"
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -172,7 +173,7 @@ std::filesystem::path settings_path() {
             nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, app_data))) {
         return {};
     }
-    return std::filesystem::path(app_data) / L"Nebula" /
+    return std::filesystem::path(app_data) / galaxy::kAppDataFolder /
            L"runtime_settings.ini";
 }
 

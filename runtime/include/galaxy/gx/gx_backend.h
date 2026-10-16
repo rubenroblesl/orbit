@@ -174,10 +174,15 @@ private:
     mutable std::array<VtxPayloadStrideMemo, 8> vtx_payload_stride_memo_{};
 };
 
+// `custom`: the bound texture is a custom replacement, which may have more levels than the game's
+// (its maximum LOD is not clamped, as in Dolphin). `arbitrary_lod_offset`: LOD bias added to a
+// mipmapped replacement whose levels carry their own content (_arb), log2(EFB scale / its scale).
 [[nodiscard]] std::uint32_t pack_sampler_key(
     const TexMode& mode,
     bool generated_mips,
-    std::uint8_t mip_levels) noexcept;
+    std::uint8_t mip_levels,
+    bool custom = false,
+    float arbitrary_lod_offset = 0.0f) noexcept;
 
 // FNV-1a step over one 64-bit value. It consumes a whole word per step instead of one byte.
 // The byte-wise form ran 8 xor-multiply rounds per 8-byte value, and the binding table hashes

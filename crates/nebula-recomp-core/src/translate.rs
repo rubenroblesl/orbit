@@ -11939,8 +11939,9 @@ fn emit_sharded_module_with_definition_rewrite(
     let mut cmake = String::from(
         "cmake_minimum_required(VERSION 3.24)\n\
          project(RMGE01NativeModule LANGUAGES CXX)\n\n\
-         if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)\n\
-         \x20   message(FATAL_ERROR \"RMGE01 native module requires Windows x64\")\n\
+         if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR\n\
+         \x20  NOT (WIN32 OR (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL \"arm64\")))\n\
+         \x20   message(FATAL_ERROR \"RMGE01 native module requires Windows x64 or macOS on Apple silicon\")\n\
          endif()\n\
          if(NOT DEFINED GALAXY_RUNTIME_INCLUDE OR\n\
          \x20  NOT DEFINED GALAXY_PPC_FLOAT_LIBRARY OR\n\
@@ -12065,6 +12066,18 @@ fn emit_sharded_module_with_definition_rewrite(
          \x20   if(GALAXY_MODULE_ENABLE_LTCG AND NOT CMAKE_CXX_COMPILER_ID STREQUAL \"Clang\")\n\
          \x20       target_compile_options(RMGE01_game PRIVATE $<$<CONFIG:Release>:/GL> $<$<CONFIG:Release>:/Gw>)\n\
          \x20       target_link_options(RMGE01_game PRIVATE $<$<CONFIG:Release>:/LTCG> $<$<CONFIG:Release>:/OPT:REF> $<$<CONFIG:Release>:/OPT:ICF>)\n\
+         \x20   endif()\n\
+         endif()\n\
+         if(APPLE)\n\
+         \x20   # Apple clang with the clang-cl semantics above: no FMA contraction, wrapping signed\n\
+         \x20   # arithmetic and no type-based alias analysis. Only the galaxy_* entry points are exported.\n\
+         \x20   target_compile_options(RMGE01_game PRIVATE -w -fno-rtti -ffp-contract=off -fwrapv -fno-strict-aliasing)\n\
+         \x20   target_link_options(RMGE01_game PRIVATE \"LINKER:-exported_symbol,_galaxy_*\")\n\
+         \x20   # Fault-handled guest accesses need the runtime's AArch64 fault decoder; without it every\n\
+         \x20   # access takes the range-checked flat path.\n\
+         \x20   option(GALAXY_MODULE_FASTMEM \"Complete MMIO accesses in the runtime's fault handler\" OFF)\n\
+         \x20   if(NOT GALAXY_MODULE_FASTMEM)\n\
+         \x20       target_compile_definitions(RMGE01_game PRIVATE GALAXY_FASTMEM_UNAVAILABLE=1)\n\
          \x20   endif()\n\
          endif()\n",
     );

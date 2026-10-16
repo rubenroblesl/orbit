@@ -22,10 +22,14 @@
 #define NOMINMAX
 #include <Windows.h>
 #include "galaxy/windows_power.h"
+#if defined(_WIN32)
 #include <SetupAPI.h>
+#include <hidsdi.h>
+#else
+#include "galaxy_macos_wiimote.h"
+#endif
 #include <Xinput.h>
 #include <bcrypt.h>
-#include <hidsdi.h>
 #include <mmdeviceapi.h>
 #include <wrl/client.h>
 #include <xaudio2.h>
@@ -71,6 +75,7 @@ struct HostHandleCloser {
         if (handle != nullptr && handle != INVALID_HANDLE_VALUE) (void)CloseHandle(handle);
     }
 };
+#if defined(_WIN32)
 struct DeviceInfoListCloser {
     void operator()(HDEVINFO devices) const noexcept {
         if (devices != nullptr && devices != INVALID_HANDLE_VALUE) {
@@ -78,8 +83,9 @@ struct DeviceInfoListCloser {
         }
     }
 };
-using ScopedHostHandle = std::unique_ptr<void, HostHandleCloser>;
 using ScopedDeviceInfoList = std::unique_ptr<void, DeviceInfoListCloser>;
+#endif
+using ScopedHostHandle = std::unique_ptr<void, HostHandleCloser>;
 
 #if defined(GALAXY_NATIVE_HOST_TEST_SUPPORT)
 // Fault points are confined to the test-support build and its calling thread.
@@ -1727,7 +1733,8 @@ bool real_wiimote_hid_enabled() {
     return read_env_flag("GALAXY_REAL_WIIMOTE_HID");
 }
 
-// True when the active input source is a real Wii Remote passed through the Windows HID bridge:
+// True when the active input source is a real Wii Remote passed through the platform HID bridge
+// (RealWiimoteHidBridge on Windows, galaxy_macos_wiimote.h on macOS):
 // either the env override or the Wii Remote input source setting. Either selection is an ownership
 // contract: a missing device hard-fails instead of switching to keyboard/mouse mid-session.
 bool real_wiimote_source_selected() {
@@ -1742,6 +1749,8 @@ std::string win32_error_text(DWORD error) {
     return "win32 error " + std::to_string(error);
 }
 
+#if defined(_WIN32)
+// Real Wii Remotes pass through the Windows HID stack (SetupAPI, hid.dll, overlapped I/O).
 struct OverlappedDrainResult {
     bool completed_successfully{};
     DWORD transferred{};
@@ -2137,6 +2146,7 @@ private:
     std::vector<std::uint8_t> input_buffer_;
     std::atomic_bool stop_requested_{false};
 };
+#endif  // defined(_WIN32)
 
 bool trace_dsp_host() {
     static const bool enabled = read_env_flag("GALAXY_TRACE_DSP_HOST");
@@ -3058,6 +3068,18 @@ void native_host_set_ownership_test_hook(NativeHostOwnershipTestHook hook) {
 }
 
 bool native_host_test_handle_cleanup() {
+#if !defined(_WIN32)
+    // Device-information lists exist only in the Windows HID bridge; check the event handle alone.
+    const HANDLE event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (event == nullptr) return false;
+    try {
+        const ScopedHostHandle event_owner(event);
+        throw std::bad_alloc();
+    } catch (const std::bad_alloc&) {
+    }
+    DWORD flags{};
+    return GetHandleInformation(event, &flags) == FALSE;
+#else
     const HANDLE event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     const HDEVINFO devices = SetupDiCreateDeviceInfoList(nullptr, nullptr);
     if (event == nullptr || devices == INVALID_HANDLE_VALUE) {
@@ -3076,6 +3098,7 @@ bool native_host_test_handle_cleanup() {
     detail.cbSize = sizeof(detail);
     return GetHandleInformation(event, &flags) == FALSE &&
         SetupDiGetDeviceInfoListDetailW(devices, &detail) == FALSE;
+#endif
 }
 
 bool native_host_test_wav_dump(std::span<const std::byte> pcm,
@@ -6323,6 +6346,7 @@ constexpr std::uint16_t kHciReadClockOffset = 0x041F;
 constexpr std::uint16_t kHciSniffMode = 0x0803;
 constexpr std::uint16_t kHciExitSniffMode = 0x0804;
 constexpr std::uint16_t kHciWriteLinkPolicySettings = 0x080D;
+constexpr std::uint8_t kHciConnectionTimeout = 0x08;
 constexpr std::uint8_t kHciRemoteUserTerminatedConnection = 0x13;
 constexpr std::size_t kWiimoteEepromBytes = 0x4000;
 constexpr std::uint32_t kWiimoteExtensionRegisterBase = 0xA40000;
@@ -11605,8 +11629,15 @@ void GuestAddressSpace::throw_if_native_input_failed() const {
 
 void GuestAddressSpace::ensure_real_wiimote_hid_worker_started() {
     if (bt_real_input_worker_ == nullptr) {
+#if defined(_WIN32)
+        std::unique_ptr<input::NativeHidIoBackend> bridge =
+            std::make_unique<RealWiimoteHidBridge>();
+#else
+        std::unique_ptr<input::NativeHidIoBackend> bridge =
+            galaxy::macos::wiimote::make_wiimote_hid_backend();
+#endif
         bt_real_input_worker_ = std::make_unique<input::NativeHidIoWorker>(
-            std::make_unique<RealWiimoteHidBridge>());
+            std::move(bridge));
         bt_real_input_worker_->set_failure_notifier(
             native_input_failure_callback_,
             native_input_failure_callback_user_);
@@ -15866,6 +15897,16 @@ const GeneratedDsp& generated_dsp() {
         path.resize(length);
         path.resize(path.find_last_of(L"\\/") + 1u);
         path += L"RMGE01_dsp.dll";
+#if !defined(_WIN32)
+        // The macOS app bundle is read-only: its launcher installs the generated modules in the
+        // user's Application Support folder and names the DSP module here.
+        std::array<wchar_t, 32768> override_path{};
+        const DWORD override_length = GetEnvironmentVariableW(
+            L"GALAXY_DSP_MODULE_PATH", override_path.data(), static_cast<DWORD>(override_path.size()));
+        if (override_length != 0u && override_length < override_path.size()) {
+            path.assign(override_path.data(), override_length);
+        }
+#endif
         const HMODULE module = LoadLibraryExW(
             path.c_str(), nullptr,
             LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
@@ -21990,7 +22031,7 @@ std::optional<std::filesystem::path> extended_length_nand_root(
     if (error || !absolute.is_absolute()) return std::nullopt;
     absolute.make_preferred();
 
-    const std::wstring native = absolute.native();
+    const std::wstring native = absolute.wstring();
     constexpr std::wstring_view kExtendedPrefix = LR"(\\?\)";
     constexpr std::wstring_view kDevicePrefix = LR"(\\.\)";
     constexpr std::wstring_view kUncPrefix = LR"(\\)";
@@ -22030,6 +22071,13 @@ std::optional<std::filesystem::path> extended_length_nand_root(
         const std::size_t share_end = value.find(L'\\', share_begin);
         return share_begin < value.size() && share_end != share_begin;
     };
+#if !defined(_WIN32)
+    // POSIX hosts have no extended-length or device prefixes.
+    (void)is_drive_path;
+    (void)is_unc_path;
+    if (!native.starts_with(L"/")) return std::nullopt;
+    return with_derived_path_headroom(std::move(absolute));
+#endif
     if (native.starts_with(kExtendedPrefix)) {
         return is_drive_path(native, kExtendedPrefix.size()) ||
                 (native.starts_with(kExtendedUncPrefix) &&
@@ -22329,7 +22377,7 @@ std::string_view isfs_parent_path(std::string_view path) {
 std::filesystem::path nand_metadata_stream_path(
     const std::filesystem::path& host_path,
     std::wstring_view stream_name = kNandMetadataStream) {
-    std::wstring stream_path = host_path.native();
+    std::wstring stream_path = host_path.wstring();
     stream_path.append(stream_name);
     return std::filesystem::path(std::move(stream_path));
 }
@@ -29293,10 +29341,41 @@ void GuestAddressSpace::maybe_reinject_wiimote_connection() {
     if (now_ticks < bt_next_connection_attempt_ticks_) {
         return;
     }
+    if (real_wiimote_reconnect_held()) {
+        return;
+    }
     if (trace_bluetooth()) {
         std::cout << "[bt] native Wiimote reconnect attempt\n";
     }
     queue_bluetooth_connection_request();
+}
+
+void GuestAddressSpace::service_real_wiimote_link() {
+    if (!native_bt_wiimote() || bt_real_input_worker_ == nullptr ||
+        !real_wiimote_source_selected()) {
+        bt_real_wiimote_link_.reset();
+        return;
+    }
+    if (bt_real_wiimote_link_.observe(
+            bt_wiimote_connected_, bt_real_input_worker_->device_link()) !=
+        input::NativeHidLinkAction::TearDown) {
+        return;
+    }
+    // The physical remote went away, or came back as a fresh device without
+    // the game's report mode, IR and extension setup. End the game's link as a
+    // remote whose radio dropped does: the game asks for its Wii Remote, and the
+    // next link (offered once a remote is attached) sets the remote up again.
+    bt_real_input_worker_->discard_output_on_reset();
+    std::cerr << "[bt] real Wii Remote link lost; the game's link ends until "
+                 "the remote is back\n";
+    queue_wiimote_acl_teardown(kHciConnectionTimeout);
+}
+
+bool GuestAddressSpace::real_wiimote_reconnect_held() const {
+    return bt_real_input_worker_ != nullptr &&
+        real_wiimote_source_selected() &&
+        input::NativeHidLinkTracker::hold_reconnect(
+            bt_real_input_worker_->device_link());
 }
 
 bool GuestAddressSpace::handle_bluetooth_connection_command(
@@ -32105,6 +32184,7 @@ void GuestAddressSpace::preload_native_input_replay_log() {
 
 void GuestAddressSpace::poll_native_bt_reconnect() {
     InputPollBreakdownScope diagnostic_scope;
+    service_real_wiimote_link();
     maybe_start_wiimote_l2cap_control_open();
     maybe_reinject_wiimote_connection();
     input_poll_diagnostic_stage(NativeInputPollStage::Cadence);
@@ -32114,6 +32194,7 @@ void GuestAddressSpace::poll_native_bt_reconnect() {
 void GuestAddressSpace::poll_native_bt_reconnect(
     const input::NativeHidPublishedBatch& published_batch) {
     InputPollBreakdownScope diagnostic_scope;
+    service_real_wiimote_link();
     maybe_start_wiimote_l2cap_control_open();
     maybe_reinject_wiimote_connection();
     input_poll_diagnostic_stage(NativeInputPollStage::Cadence);

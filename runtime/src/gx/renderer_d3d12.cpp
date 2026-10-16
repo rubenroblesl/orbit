@@ -1,5 +1,8 @@
 #include "galaxy/gx/renderer_d3d12.h"
+#include "galaxy/gx/custom_textures.h"
 #include "galaxy/gx/display_modes.h"
+#include "galaxy/gx/window_messages.h"
+#include "galaxy/product.h"
 
 #include "galaxy/content_viewport.h"
 #include "galaxy/experimental_ultrawide_aspect.h"
@@ -105,6 +108,7 @@ static constexpr UINT kSettingsKeyMessage = WM_USER + 0x43;
 // Render-thread display change (lParam: const WindowPlacement*), sent and
 // completed on the window thread.
 static constexpr UINT kPlaceWindowMessage = WM_USER + 0x44;
+static_assert(galaxy::gx::kSystemDisplayModeMessage == WM_USER + 0x45);
 struct WindowPlacement {
     DWORD style = 0;
     RECT rect{};
@@ -521,6 +525,8 @@ unsigned pending_settings_changes() {
     changes += d.per_pixel_lighting != live.per_pixel_lighting;
     changes += d.hud_output_resolution != live.hud_output_resolution;
     changes += d.draw_distance != live.draw_distance;
+    changes += d.custom_textures != live.custom_textures;
+    changes += d.prefetch_custom_textures != live.prefetch_custom_textures;
     changes += controls_changes();
     return changes;
 }
@@ -674,7 +680,7 @@ unsigned graphics_row(unsigned row) {
 unsigned native_settings_row_count(unsigned tab) {
     switch (tab % kNativeSettingsTabCount) {
     case 0: return 8u;
-    case 1: return fsr3_available() ? 10u : 9u;
+    case 1: return fsr3_available() ? 12u : 11u;
     case 2: return controls_row_count();
     case 3: return 6u;
     case 4: return 6u;
@@ -778,6 +784,8 @@ void apply_native_settings_draft() {
     applied.per_pixel_lighting = next.per_pixel_lighting;
     applied.hud_output_resolution = next.hud_output_resolution;
     applied.draw_distance = next.draw_distance;
+    applied.custom_textures = next.custom_textures;
+    applied.prefetch_custom_textures = next.prefetch_custom_textures;
     const bool display_changed = display_settings_differ(live, applied);
     const unsigned changes = pending_settings_changes();
     if (applied.internal_follow_window) {
@@ -1004,6 +1012,8 @@ void adjust_native_setting_unlogged(int delta) {
         case 7: draft.per_pixel_lighting = !draft.per_pixel_lighting; break;
         case 8: draft.hud_output_resolution = !draft.hud_output_resolution; break;
         case 9: draft.draw_distance = step(std::min(draft.draw_distance, 3u), 4u); break;
+        case 10: draft.custom_textures = !draft.custom_textures; break;
+        case 11: draft.prefetch_custom_textures = !draft.prefetch_custom_textures; break;
         default: return;
         }
         return;
@@ -2031,6 +2041,29 @@ LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     if (msg == kDisplayModeMessage) {
         apply_requested_display_mode(hwnd, wp != 0u);
+        return 0;
+    }
+    if (msg == galaxy::gx::kSystemDisplayModeMessage) {
+        // The system put the window in or out of full screen (macOS: its title bar button or the
+        // Window menu): the display mode follows, and a windowed size is the window's own.
+        const bool full_screen = wp != 0u;
+        RenderConfig render = get_render_config();
+        const unsigned mode = full_screen ? kDisplayBorderless : kDisplayWindowed;
+        bool changed = render.display_mode != mode;
+        render.display_mode = mode;
+        RECT client{};
+        if (!full_screen && GetClientRect(hwnd, &client) && client.right > 0 && client.bottom > 0 &&
+            (render.window_width != static_cast<unsigned>(client.right) ||
+             render.window_height != static_cast<unsigned>(client.bottom))) {
+            render.window_width = static_cast<unsigned>(client.right);
+            render.window_height = static_cast<unsigned>(client.bottom);
+            changed = true;
+        }
+        s_borderless_active.store(full_screen, std::memory_order_release);
+        if (changed) {
+            set_render_config(render);
+            s_native_settings_dirty.store(true, std::memory_order_release);
+        }
         return 0;
     }
     if (msg == kSettingsKeyMessage) {
@@ -4237,7 +4270,7 @@ bool RendererD3D12::initialize(int window_width, int window_height, unsigned efb
             hidden_window ? (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)
                           : WS_EX_APPWINDOW;
         window_ = window_owner_.start({
-            kWindowClass, L"Nebula", window_style, ex_style,
+            kWindowClass, galaxy::kProductName, window_style, ex_style,
             window_x, window_y, static_cast<int>(outer_width),
             static_cast<int>(outer_height), !hidden_window});
         if (!window_) { std::cerr << "[Renderer] CreateWindow failed\n"; return false; }
@@ -5049,7 +5082,8 @@ RECT windowed_rect_on_monitor(const MonitorInfo& monitor, unsigned width,
     const long outer_h = client_h + frame_h;
     const long left = monitor.work_area.left + std::max(0L, (work_w - outer_w) / 2);
     const long top = monitor.work_area.top + std::max(0L, (work_h - outer_h) / 2);
-    return RECT{left, top, left + outer_w, top + outer_h};
+    return RECT{static_cast<LONG>(left), static_cast<LONG>(top), static_cast<LONG>(left + outer_w),
+                static_cast<LONG>(top + outer_h)};
 }
 }  // namespace
 
@@ -9317,6 +9351,17 @@ std::string native_settings_row_text(
             static constexpr const char* kDistances[] = {"ORIGINAL", "2X", "4X", "8X"};
             return std::string("DRAW DISTANCE: ") + kDistances[std::min(render.draw_distance, 3u)];
         }
+        case 10: {
+            // Dolphin's "Load Custom Textures"; the count is the pack indexed for the live setting.
+            if (!render.custom_textures) return "CUSTOM TEXTURES: OFF";
+            const std::size_t indexed = render.custom_textures == get_render_config().custom_textures
+                ? custom_texture_library().stats().indexed : 0u;
+            if (indexed == 0u) return "CUSTOM TEXTURES: ON";
+            std::snprintf(text, sizeof(text), "CUSTOM TEXTURES: ON (%zu)", indexed);
+            return text;
+        }
+        case 11:
+            return std::string("PREFETCH TEXTURES: ") + (render.prefetch_custom_textures ? "ON" : "OFF");
         default:
             return {};
         }

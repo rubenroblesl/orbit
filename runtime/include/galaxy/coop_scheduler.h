@@ -172,7 +172,7 @@ private:
     // SelectThread).
     ChainState unowned_chain_{};
     std::uint32_t running_thread_ = 0u;
-    unsigned int mxcsr_ = 0u;
+    std::uint64_t fp_control_ = 0u;
     // Fibers of exited or recreated threads; deleted from another fiber.
     std::vector<void*> retired_;
     std::exception_ptr fiber_error_{};

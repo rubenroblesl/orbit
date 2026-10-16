@@ -145,6 +145,14 @@ struct RenderConfig {
     // shadows: 0 the game's own, 1 twice, 2 four times, 3 eight times.
     // Wider pictures show the game's cut-offs at their sides.
     unsigned draw_distance       = 0;
+    // Custom textures in Dolphin's pack format (custom_textures.h): "Load Custom Textures"
+    // replaces game textures with a pack's files; "Prefetch Custom Textures" reads the whole
+    // pack into memory at start instead of each file at its first use. The directory holds the
+    // game's folder (RMGE01 or RMG, Dolphin's Load/Textures layout); empty selects
+    // <local app data>/Nebula/Load/Textures.
+    bool     custom_textures     = false;
+    bool     prefetch_custom_textures = false;
+    std::array<char, 512> custom_textures_dir{};
 };
 
 // Frame-rate choices: 30 and the game's own 60.

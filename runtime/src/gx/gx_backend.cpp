@@ -11,6 +11,7 @@
 #pragma warning(pop)
 
 #include "galaxy/gx/gx_backend.h"
+#include "galaxy/product.h"
 #include "galaxy/gx/dependency_draw_memo.h"
 #include "galaxy/gx/dependency_range_memo.h"
 #include "galaxy/gx/dependency_page_mask.h"
@@ -56,7 +57,9 @@ namespace galaxy::gx {
 std::uint32_t pack_sampler_key(
     const TexMode& mode,
     bool generated_mips,
-    std::uint8_t mip_levels) noexcept {
+    std::uint8_t mip_levels,
+    bool custom,
+    float arbitrary_lod_offset) noexcept {
     std::uint32_t min_filter =
         static_cast<std::uint32_t>(mode.min_filter) & 0x7u;
     std::uint32_t max_lod =
@@ -70,13 +73,21 @@ std::uint32_t pack_sampler_key(
             0xFFu,
             static_cast<std::uint32_t>(mip_levels - 1u) * 16u);
     }
+    std::uint32_t lod_bias = static_cast<std::uint8_t>(mode.lod_bias_x32);
+    if (custom && (min_filter & 0x3u) != 0u) {
+        max_lod = 0xFFu;
+        if (arbitrary_lod_offset != 0.0f) {
+            const long biased = static_cast<long>(static_cast<std::int8_t>(mode.lod_bias_x32)) +
+                std::lround(arbitrary_lod_offset * 32.0f);
+            lod_bias = static_cast<std::uint8_t>(static_cast<std::int8_t>(std::clamp(biased, -128L, 127L)));
+        }
+    }
     return
           (static_cast<std::uint32_t>(mode.wrap_s) & 0x3u)
         | ((static_cast<std::uint32_t>(mode.wrap_t) & 0x3u) << 2)
         | ((static_cast<std::uint32_t>(mode.mag_filter) & 0x1u) << 4)
         | (min_filter << 5)
-        | ((static_cast<std::uint32_t>(
-               static_cast<std::uint8_t>(mode.lod_bias_x32)) & 0xFFu) << 8)
+        | ((lod_bias & 0xFFu) << 8)
         | ((static_cast<std::uint32_t>(mode.min_lod_x16) & 0xFFu) << 16)
         | (max_lod << 24);
 }
@@ -3313,7 +3324,7 @@ bool GxBackend::initialize(int w, int h) {
         std::size_t local_app_len = 0;
         if (_wdupenv_s(&local_app, &local_app_len, L"LOCALAPPDATA") == 0 && local_app != nullptr) {
             cache_dir = std::filesystem::path(local_app)
-                / L"Nebula" / L"shadercache" / L"RMGE01";
+                / galaxy::kAppDataFolder / L"shadercache" / L"RMGE01";
             std::free(local_app);
         } else {
             if (local_app) std::free(local_app);
@@ -9749,8 +9760,13 @@ std::array<std::uint32_t, kMaxTextureMaps> GxBackend::capture_sampler_keys(
             continue;
         }
         const TextureHandle& handle = handles[map];
+        // Dolphin's secondary bias for replacements with arbitrary mips keeps the distance at
+        // which their levels kick in independent of the internal resolution.
+        const float arbitrary_lod_offset = handle.custom && handle.arbitrary_mips && handle.custom_scale > 0.0f
+            ? std::log2(static_cast<float>(renderer_.efb_scale()) / handle.custom_scale)
+            : 0.0f;
         keys[map] = pack_sampler_key(
-            state_.tex_mode(map), handle.generated_mips, handle.mip_levels);
+            state_.tex_mode(map), handle.generated_mips, handle.mip_levels, handle.custom, arbitrary_lod_offset);
     }
     // Unused slots still get valid zero-key descriptors, but cannot fragment
     // the table cache. map_mask includes both direct and indirect sampling.

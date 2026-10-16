@@ -10,6 +10,9 @@ namespace {
 
 // GDI device name -> the monitor's own (EDID) name, for active outputs.
 std::map<std::wstring, std::wstring> monitor_names() {
+#if !defined(_WIN32)
+    return galaxy::macos::monitor_names();
+#else
     std::map<std::wstring, std::wstring> names;
     UINT32 path_count = 0u;
     UINT32 mode_count = 0u;
@@ -42,6 +45,7 @@ std::map<std::wstring, std::wstring> monitor_names() {
         }
     }
     return names;
+#endif
 }
 
 BOOL CALLBACK collect_monitor(HMONITOR monitor, HDC, LPRECT, LPARAM user) {

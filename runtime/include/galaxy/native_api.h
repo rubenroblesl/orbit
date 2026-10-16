@@ -18,6 +18,7 @@
 #include <intrin.h>
 #endif
 
+#include "galaxy/platform_compat.h"
 #include "galaxy/ppc_float.h"
 
 #if defined(_WIN32)
@@ -5002,7 +5003,10 @@ GALAXY_ALWAYS_INLINE const std::byte* guest_flat_read_base(
 // byte stores and plain mov stores), performs the access through the device
 // path, writes the register and resumes. The write-gather pipe keeps its one
 // inline test because every GX command passes through it.
-#if defined(GALAXY_FASTMEM) && GALAXY_FASTMEM && defined(__clang__)
+// GALAXY_FASTMEM_UNAVAILABLE builds a fastmem module for a runtime without a fault decoder for the
+// host ISA: every access keeps its range test instead.
+#if defined(GALAXY_FASTMEM) && GALAXY_FASTMEM && defined(__clang__) && \
+    !defined(GALAXY_FASTMEM_UNAVAILABLE)
 #define GALAXY_FASTMEM_ACTIVE 1
 #else
 #define GALAXY_FASTMEM_ACTIVE 0
