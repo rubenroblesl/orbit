@@ -24,7 +24,7 @@ final class GameRunner: ObservableObject {
             try Settings.prepareForLaunch()
             try Paths.ensure(Paths.logs)
         } catch {
-            lastExitMessage = "No se pudieron guardar los ajustes: \(error.localizedDescription)"
+            lastExitMessage = L("The settings could not be saved: \(error.localizedDescription)")
             return
         }
         let log = Paths.logs.appendingPathComponent("game.log")
@@ -54,7 +54,7 @@ final class GameRunner: ObservableObject {
         do {
             try process.run()
         } catch {
-            lastExitMessage = "No se pudo abrir el juego: \(error.localizedDescription)"
+            lastExitMessage = L("The game could not be opened: \(error.localizedDescription)")
             return
         }
         self.process = process
@@ -77,8 +77,8 @@ final class GameRunner: ObservableObject {
         }
         onExit?()
         if reason == .uncaughtSignal || status != 0 {
-            lastExitMessage = wiiRemoteExitMessage() ?? "El juego se cerró inesperadamente (código \(status)). " +
-                "El registro está en Ajustes › Juego."
+            lastExitMessage = wiiRemoteExitMessage() ??
+                L("The game quit unexpectedly (code \(Int(status))). The log is in Settings › Game.")
         }
     }
 
@@ -91,11 +91,10 @@ final class GameRunner: ObservableObject {
         try? handle.seek(toOffset: size > 65536 ? size - 65536 : 0)
         guard let data = try? handle.readToEnd(), let tail = String(data: data, encoding: .utf8) else { return nil }
         if tail.contains("no Wii Remote is connected") {
-            return "El juego se cerró porque no hay ningún Wii Remote conectado. " +
-                "Empareja el Wii Remote en Ajustes del Sistema › Bluetooth y vuelve a pulsar Jugar."
+            return L("The game quit because no Wii Remote is connected. Pair the Wii Remote in System Settings › Bluetooth and select Play again.")
         }
         if tail.contains("real Wii Remote HID") || tail.contains("real Wiimote HID") {
-            return "El juego se cerró por un problema con el Wii Remote. El registro está en Ajustes › Juego."
+            return L("The game quit because of a problem with the Wii Remote. The log is in Settings › Game.")
         }
         return nil
     }

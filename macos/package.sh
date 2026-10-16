@@ -77,6 +77,7 @@ step "Recompiler"
 (cd "$REPO" && MACOSX_DEPLOYMENT_TARGET=14.0 cargo build --release --locked -p nebula-recomp)
 
 step "Launcher"
+python3 "$REPO/macos/tools/check_localization.py"
 rm -rf "$STAGE" && mkdir -p "$STAGE"
 xcrun swiftc -O -parse-as-library -target arm64-apple-macos14.0 \
     -o "$STAGE/$NAME" "$REPO"/macos/Launcher/*.swift
@@ -119,6 +120,8 @@ plist() {  # plist <file> <executable> <identifier> <name> [extra keys]
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleLocalizations</key><array><string>en</string><string>es</string></array>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.games</string>
     <key>NSHighResolutionCapable</key><true/>
@@ -133,6 +136,9 @@ plist "$GAME_APP/Contents/Info.plist" "$NAME" dev.orbit.game "$NAME" \
     "<key>GCSupportsControllerUserInteraction</key><true/><key>LSUIElement</key><false/>"
 
 cp "$STAGE/$NAME" "$CONTENTS/MacOS/$NAME"
+# English and Spanish, chosen by macOS from the user's preferred languages.
+cp -R "$REPO"/macos/Localization/*.lproj "$CONTENTS/Resources/"
+cp -R "$REPO"/macos/Localization/*.lproj "$GAME_APP/Contents/Resources/"
 cp "$BUILD_DIR/NebulaRuntime" "$GAME_APP/Contents/MacOS/$NAME"
 
 # Recompiler and build tools.
@@ -193,7 +199,8 @@ if (( MAKE_DMG )); then
     mkdir -p "$DMG_ROOT"
     cp -cR "$APP" "$DMG_ROOT/" 2>/dev/null || cp -R "$APP" "$DMG_ROOT/"
     ln -s /Applications "$DMG_ROOT/Applications"
-    cp "$REPO/macos/LEEME.txt" "$DMG_ROOT/LÉEME.txt"
+    cp "$REPO/macos/dmg/README.txt" "$DMG_ROOT/README.txt"
+    cp "$REPO/macos/dmg/LEEME.txt" "$DMG_ROOT/LÉEME.txt"
     rm -f "$OUTPUT/$NAME.dmg"
     hdiutil create -volname "$NAME" -srcfolder "$DMG_ROOT" -fs APFS -format ULFO -ov "$OUTPUT/$NAME.dmg" >/dev/null
 fi

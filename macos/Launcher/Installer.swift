@@ -12,13 +12,13 @@ enum InstallStep: Int, CaseIterable, Identifiable {
     var id: Int { rawValue }
     var title: String {
         switch self {
-        case .tools: return "Comprobación de herramientas"
-        case .identify: return "Verificación de la imagen"
-        case .extract: return "Extracción del disco"
-        case .content: return "Preparación del contenido"
-        case .generate: return "Traducción del código"
-        case .compile: return "Compilación"
-        case .finish: return "Finalización"
+        case .tools: return L("Checking tools")
+        case .identify: return L("Verifying the image")
+        case .extract: return L("Extracting the disc")
+        case .content: return L("Preparing the content")
+        case .generate: return L("Translating the code")
+        case .compile: return L("Compiling")
+        case .finish: return L("Finishing")
         }
     }
     // Share of the whole installation, for the progress bar.
@@ -45,16 +45,16 @@ enum InstallError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .toolsMissing:
-            return "Las herramientas de línea de comandos de Apple no están instaladas."
+            return L("Apple’s command line tools are not installed.")
         case .notSupported(let detail):
-            return "El archivo no corresponde a Super Mario Galaxy (EE. UU., revisión 0).\n\(detail)"
+            return L("The file is not Super Mario Galaxy (USA, revision 0).\n\(detail)")
         case .notEnoughSpace(let needed, let available):
             let formatter = ByteCountFormatter()
-            return "Espacio insuficiente: se necesitan \(formatter.string(fromByteCount: needed)) y hay \(formatter.string(fromByteCount: available)) disponibles."
+            return L("Not enough disk space: \(formatter.string(fromByteCount: needed)) needed and \(formatter.string(fromByteCount: available)) available.")
         case .commandFailed(let step, let detail):
-            return "Error en el paso «\(step.title)».\n\(detail)"
+            return L("The step “\(step.title)” failed.\n\(detail)")
         case .cancelled:
-            return "Instalación cancelada."
+            return L("Installation cancelled.")
         }
     }
 }
@@ -96,7 +96,7 @@ final class Installer: ObservableObject {
     nonisolated static func identify(_ image: URL) -> Identification {
         let result = run(Paths.recompiler, ["identify", image.path])
         let lines = result.output.split(separator: "\n").map(String.init)
-        let first = lines.first ?? "No se pudo leer el archivo."
+        let first = lines.first ?? L("The file could not be read.")
         return Identification(supported: result.status == 0 && first.contains("RMGE01") && first.contains("revision 0"),
                               summary: first)
     }
@@ -220,10 +220,10 @@ final class Installer: ObservableObject {
             try? fm.removeItem(at: work.appendingPathComponent("disc"))  // ~3 GB no longer needed
         } else {
             // Repair: keep the installed content and inputs, rebuild everything else.
-            begin(.identify, "Se reutilizan los datos de la instalación anterior.")
+            begin(.identify, L("Reusing the data of the previous installation."))
             guard fm.fileExists(atPath: Paths.game.appendingPathComponent("game-inputs/sys/main.dol").path),
                   fm.fileExists(atPath: Paths.gameContent.path) else {
-                throw InstallError.notSupported("No hay datos de una instalación anterior. Selecciona la imagen del juego.")
+                throw InstallError.notSupported(L("There is no data from a previous installation. Select the game image."))
             }
             try fm.copyItem(at: Paths.game.appendingPathComponent("game-inputs"), to: inputs)
             if let manifest = try? JSONSerialization.jsonObject(with: Data(contentsOf: Paths.installManifest)) as? [String: Any] {

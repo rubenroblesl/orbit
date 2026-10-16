@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //
-// The Settings window (Orbit › Ajustes…, ⌘,): Pantalla, Gráficos, Sonido, Controles, Juego.
+// The Settings window (Orbit › Settings…, ⌘,): Display, Graphics, Sound, Controls, Game.
 // Changes are written to the runtime's own files right away; the in-game menu (F1) edits the
 // same files.
 
@@ -8,8 +8,17 @@ import AppKit
 import SwiftUI
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case display = "Pantalla", graphics = "Gráficos", sound = "Sonido", controls = "Controles", game = "Juego"
+    case display, graphics, sound, controls, game
     var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .display: return L("Display")
+        case .graphics: return L("Graphics")
+        case .sound: return L("Sound")
+        case .controls: return L("Controls")
+        case .game: return L("Game")
+        }
+    }
     var symbol: String {
         switch self {
         case .display: return "display"
@@ -29,7 +38,7 @@ struct SettingsView: View {
         TabView(selection: $tab) {
             ForEach(SettingsTab.allCases) { item in
                 SettingsTabContent(tab: item)
-                    .tabItem { Label(item.rawValue, systemImage: item.symbol) }
+                    .tabItem { Label(item.title, systemImage: item.symbol) }
                     .tag(item)
             }
         }
@@ -56,7 +65,7 @@ struct SettingsTabContent: View {
     }
 }
 
-// MARK: - Pantalla
+// MARK: - Display
 
 private struct DisplaySettings: View {
     @EnvironmentObject private var settings: Settings
@@ -64,35 +73,35 @@ private struct DisplaySettings: View {
     var body: some View {
         Form {
             Section {
-                Picker("Modo", selection: $settings.displayMode) {
+                Picker("Mode", selection: $settings.displayMode) {
                     ForEach(DisplayMode.allCases) { Text($0.title).tag($0) }
                 }
                 if settings.displayMode == .window {
-                    Picker("Tamaño de la ventana", selection: windowSize) {
-                        ForEach(Settings.windowSizes, id: \.0) { Text("\($0.0) × \($0.1)").tag("\($0.0)x\($0.1)") }
+                    Picker("Window size", selection: windowSize) {
+                        ForEach(Settings.windowSizes, id: \.0) { Text(verbatim: "\($0.0) × \($0.1)").tag("\($0.0)x\($0.1)") }
                         if !Settings.windowSizes.contains(where: { "\($0.0)x\($0.1)" == windowSize.wrappedValue }) {
-                            Text("\(settings.windowWidth) × \(settings.windowHeight)").tag(windowSize.wrappedValue)
+                            Text(verbatim: "\(settings.windowWidth) × \(settings.windowHeight)").tag(windowSize.wrappedValue)
                         }
                     }
                 }
             }
             Section {
-                Picker("Resolución interna", selection: resolution) {
-                    Text("Automática").tag(0)
+                Picker("Internal resolution", selection: resolution) {
+                    Text("Automatic").tag(0)
                     Divider()
                     ForEach(1...Settings.maxInternalScale, id: \.self) { Text(scaleTitle($0)).tag($0) }
                 }
-                Picker("Proporción", selection: $settings.aspect) {
+                Picker("Aspect ratio", selection: $settings.aspect) {
                     ForEach(AspectChoice.allCases) { Text($0.title).tag($0) }
                 }
             } footer: {
-                Text("Con la resolución automática el juego se dibuja a la resolución de la ventana. La proporción automática se adapta a la forma de la pantalla.")
+                Text("With automatic resolution, the game renders at the resolution of the window. Automatic aspect ratio follows the shape of the display.")
                     .foregroundStyle(.secondary)
             }
             Section {
-                Toggle("Sincronización vertical", isOn: $settings.vsync)
+                Toggle("Vertical sync", isOn: $settings.vsync)
             } footer: {
-                Text("Evita el desgarro de imagen. Puede añadir algo de latencia.").foregroundStyle(.secondary)
+                Text("Prevents screen tearing. It can add some latency.").foregroundStyle(.secondary)
             }
         }
     }
@@ -121,7 +130,7 @@ private struct DisplaySettings: View {
     }
 }
 
-// MARK: - Gráficos
+// MARK: - Graphics
 
 private struct GraphicsSettings: View {
     @EnvironmentObject private var settings: Settings
@@ -129,40 +138,40 @@ private struct GraphicsSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Texturas HD", isOn: $settings.customTextures)
+                Toggle("HD textures", isOn: $settings.customTextures)
                     .disabled(!Settings.texturesAvailable)
-                Toggle("Precargar texturas", isOn: $settings.prefetchTextures)
+                Toggle("Preload textures", isOn: $settings.prefetchTextures)
                     .disabled(!settings.customTextures)
             } footer: {
                 Text(Settings.texturesAvailable
-                     ? "Texturas HD de CDAMJC y Razius y HUD en HD de Super Hackio y SY24, incluidos con su crédito y con agradecimiento. La precarga lee el paquete entero al iniciar el juego para evitar tirones y usa unos 2,5 GB de memoria."
-                     : "No hay ningún paquete de texturas instalado.")
+                     ? L("HD textures by CDAMJC and Razius and HD HUD by Super Hackio and SY24, included with credit and with thanks. Preloading reads the whole pack when the game starts to avoid stutter and uses about 2.5 GB of memory.")
+                     : L("No texture pack is installed."))
                     .foregroundStyle(.secondary)
             }
             Section {
-                Picker("Suavizado de bordes", selection: $settings.antiAliasing) {
+                Picker("Anti-aliasing", selection: $settings.antiAliasing) {
                     ForEach(AntiAliasing.allCases) { Text($0.title).tag($0) }
                 }
-                Picker("Filtrado anisótropo", selection: $settings.anisotropy) {
-                    Text("Desactivado").tag(1)
-                    ForEach([2, 4, 8, 16], id: \.self) { Text("\($0)×").tag($0) }
+                Picker("Anisotropic filtering", selection: $settings.anisotropy) {
+                    Text("Off").tag(1)
+                    ForEach([2, 4, 8, 16], id: \.self) { Text(verbatim: "\($0)×").tag($0) }
                 }
-                Toggle("Iluminación por píxel", isOn: $settings.perPixelLighting)
-                Picker("Distancia de dibujado", selection: $settings.drawDistance) {
+                Toggle("Per-pixel lighting", isOn: $settings.perPixelLighting)
+                Picker("Draw distance", selection: $settings.drawDistance) {
                     Text("Original").tag(0)
-                    Text("2×").tag(1)
-                    Text("4×").tag(2)
-                    Text("8×").tag(3)
+                    Text(verbatim: "2×").tag(1)
+                    Text(verbatim: "4×").tag(2)
+                    Text(verbatim: "8×").tag(3)
                 }
             } footer: {
-                Text("La iluminación por píxel y la distancia de dibujado alteran ligeramente el aspecto original.")
+                Text("Per-pixel lighting and a longer draw distance change the original look slightly.")
                     .foregroundStyle(.secondary)
             }
         }
     }
 }
 
-// MARK: - Sonido
+// MARK: - Sound
 
 private struct SoundSettings: View {
     @EnvironmentObject private var settings: Settings
@@ -170,12 +179,12 @@ private struct SoundSettings: View {
     var body: some View {
         Form {
             Section {
-                volume("General", $settings.masterVolume)
-                volume("Música", $settings.musicVolume)
-                volume("Efectos", $settings.effectsVolume)
-                volume("Voces", $settings.voiceVolume)
+                volume(L("Master volume"), $settings.masterVolume)
+                volume(L("Music"), $settings.musicVolume)
+                volume(L("Effects"), $settings.effectsVolume)
+                volume(L("Voices"), $settings.voiceVolume)
             } footer: {
-                Text("También se puede ajustar durante la partida en el menú del juego (F1).").foregroundStyle(.secondary)
+                Text("You can also adjust the volume during play in the game menu (F1).").foregroundStyle(.secondary)
             }
         }
     }
@@ -184,7 +193,7 @@ private struct SoundSettings: View {
         LabeledContent(title) {
             HStack {
                 Slider(value: value, in: 0...2).frame(width: 220)
-                Text("\(Int((value.wrappedValue * 100).rounded())) %")
+                Text(value.wrappedValue, format: .percent.precision(.fractionLength(0)))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
                     .frame(width: 46, alignment: .trailing)
@@ -193,7 +202,7 @@ private struct SoundSettings: View {
     }
 }
 
-// MARK: - Controles
+// MARK: - Controls
 
 private struct ControlSettings: View {
     @EnvironmentObject private var model: AppModel
@@ -204,7 +213,7 @@ private struct ControlSettings: View {
     var body: some View {
         Form {
             Section {
-                Picker("Método de control", selection: $settings.controlStyle) {
+                Picker("Control method", selection: $settings.controlStyle) {
                     Text(ControlStyle.keyboardMouse.title).tag(ControlStyle.keyboardMouse)
                     Text(ControlStyle.controller.title).tag(ControlStyle.controller)
                     Text(ControlStyle.auto.title).tag(ControlStyle.auto)
@@ -216,10 +225,10 @@ private struct ControlSettings: View {
             }
             if settings.controlStyle == .wiiRemote {
                 Section {
-                    LabeledContent("Wii Remote conectado",
-                                   value: model.wiiRemotes.isEmpty ? "Ninguno" : model.wiiRemotes.joined(separator: ", "))
-                    LabeledContent("Emparejar") {
-                        Button("Cómo conectarlo…") { showingWiiHelp = true }
+                    LabeledContent("Connected Wii Remote",
+                                   value: model.wiiRemotes.isEmpty ? L("None") : model.wiiRemotes.joined(separator: ", "))
+                    LabeledContent("Pairing") {
+                        Button("How to connect…") { showingWiiHelp = true }
                             .popover(isPresented: $showingWiiHelp, arrowEdge: .bottom) { WiiRemotePairingHelp() }
                     }
                 } footer: {
@@ -227,18 +236,18 @@ private struct ControlSettings: View {
                 }
             }
             Section {
-                LabeledContent("Mandos conectados",
-                               value: model.controllers.isEmpty ? "Ninguno" : model.controllers.joined(separator: ", "))
-                Toggle("Vibración", isOn: $settings.vibration)
+                LabeledContent("Connected controllers",
+                               value: model.controllers.isEmpty ? L("None") : model.controllers.joined(separator: ", "))
+                Toggle("Vibration", isOn: $settings.vibration)
                 LabeledContent("Bluetooth") {
-                    Button("Abrir ajustes de Bluetooth…") {
+                    Button("Open Bluetooth settings…") {
                         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings")!)
                     }
                 }
             }
             Section {
-                LabeledContent("Asignación de botones") {
-                    Button("Mostrar controles…") { showingControls = true }
+                LabeledContent("Button mapping") {
+                    Button("Show controls…") { showingControls = true }
                 }
             }
         }
@@ -249,15 +258,15 @@ private struct ControlSettings: View {
 
     private var help: String {
         switch settings.controlStyle {
-        case .keyboardMouse: return "Usa solo el teclado y el ratón. Los mandos se ignoran."
-        case .controller: return "Usa solo el mando. El ratón y el trackpad no mueven el puntero."
-        case .auto: return "Teclado, ratón y mandos funcionan a la vez."
-        case .wiiRemote: return "Usa solo el Wii Remote y el Nunchuk, emparejados por Bluetooth. El teclado, el ratón y los mandos se ignoran."
+        case .keyboardMouse: return L("Only the keyboard and mouse are used. Controllers are ignored.")
+        case .controller: return L("Only the controller is used. The mouse and trackpad do not move the pointer.")
+        case .auto: return L("The keyboard, mouse and controllers work at the same time.")
+        case .wiiRemote: return L("Only the Wii Remote and Nunchuk, paired over Bluetooth, are used. The keyboard, mouse and controllers are ignored.")
         }
     }
 }
 
-// MARK: - Juego
+// MARK: - Game
 
 private struct GameSettings: View {
     @EnvironmentObject private var model: AppModel
@@ -270,51 +279,51 @@ private struct GameSettings: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("Juego", value: "Super Mario Galaxy, EE. UU. (RMGE01)")
-                LabeledContent("Origen", value: installedSource)
-                LabeledContent("Ubicación") {
-                    Button("Mostrar en el Finder") { reveal(Paths.game) }
+                LabeledContent("Game", value: L("Super Mario Galaxy, USA (RMGE01)"))
+                LabeledContent("Source", value: installedSource)
+                LabeledContent("Location") {
+                    Button("Show in Finder") { reveal(Paths.game) }
                 }
             }
             Section {
-                Toggle("Descargar la portada de GameTDB", isOn: $downloadCovers)
+                Toggle("Download box art from GameTDB", isOn: $downloadCovers)
                     .onChange(of: downloadCovers) { model.cover.refresh() }
             } footer: {
-                Text("Como en Dolphin, la portada se descarga de GameTDB.com y se guarda solo en este Mac. Para usar otra imagen, colócala en Load/GameCovers/RMGE01.png dentro de la carpeta de Orbit.")
+                Text("As in Dolphin, the box art is downloaded from GameTDB.com and kept only on this Mac. To use another picture, place it at Load/GameCovers/RMGE01.png in the Orbit folder.")
                     .foregroundStyle(.secondary)
             }
             Section {
-                LabeledContent("Cambiar imagen del juego") {
-                    Button("Cambiar…") {
+                LabeledContent("Change game image") {
+                    Button("Change…") {
                         NSApp.keyWindow?.close()
                         model.restartSetup()
                         openWindow(id: "main")
                     }
                 }
-                LabeledContent("Reparar instalación") {
-                    Button("Reparar…") { repairing = true }
+                LabeledContent("Repair installation") {
+                    Button("Repair…") { repairing = true }
                 }
             } footer: {
-                Text("La reparación vuelve a compilar el juego con los datos ya instalados, sin pedir la imagen.")
+                Text("Repairing compiles the game again from the installed data. It does not need the disc image.")
                     .foregroundStyle(.secondary)
             }
             Section {
-                LabeledContent("Partidas guardadas") {
-                    Button("Mostrar en el Finder") { reveal(Paths.saves) }
+                LabeledContent("Saved games") {
+                    Button("Show in Finder") { reveal(Paths.saves) }
                 }
-                LabeledContent("Registros") {
-                    Button("Mostrar en el Finder") { reveal(Paths.logs) }
+                LabeledContent("Logs") {
+                    Button("Show in Finder") { reveal(Paths.logs) }
                 }
-                LabeledContent("Ajustes recomendados") {
-                    Button("Restaurar…") { confirmRestore = true }
+                LabeledContent("Recommended settings") {
+                    Button("Restore…") { confirmRestore = true }
                 }
             } footer: {
-                Text("Orbit \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
+                Text(verbatim: "Orbit \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                     .foregroundStyle(.secondary)
             }
         }
-        .confirmationDialog("¿Restaurar los ajustes recomendados?", isPresented: $confirmRestore) {
-            Button("Restaurar") {
+        .confirmationDialog("Restore the recommended settings?", isPresented: $confirmRestore) {
+            Button("Restore") {
                 settings.applyRecommended(controls: settings.controlStyle)
                 settings.masterVolume = 1
                 settings.musicVolume = 1
@@ -323,7 +332,7 @@ private struct GameSettings: View {
                 settings.save()
             }
         } message: {
-            Text("Se restablecen la pantalla, los gráficos y el sonido. Las partidas y la asignación de botones no cambian.")
+            Text("Display, graphics and sound settings are reset. Saved games and button mapping do not change.")
         }
         .sheet(isPresented: $repairing) {
             RepairSheet().environmentObject(model.installer)
@@ -333,7 +342,7 @@ private struct GameSettings: View {
     private var installedSource: String {
         guard let data = try? Data(contentsOf: Paths.installManifest),
               let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let source = manifest["source"] as? String, !source.isEmpty else { return "Desconocido" }
+              let source = manifest["source"] as? String, !source.isEmpty else { return L("Unknown") }
         return URL(fileURLWithPath: source).lastPathComponent
     }
 
@@ -350,26 +359,26 @@ struct RepairSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(installer.finished ? "Reparación completada"
-                 : installer.failure != nil ? "No se pudo reparar la instalación" : "Reparando la instalación")
+            Text(installer.finished ? L("Repair complete")
+                 : installer.failure != nil ? L("The installation could not be repaired") : L("Repairing the installation"))
                 .font(.headline)
             if let failure = installer.failure {
                 StatusLine(kind: .failure, text: failure.errorDescription ?? "")
                     .textSelection(.enabled)
             } else if !installer.finished {
                 ProgressView(value: installer.overallProgress)
-                Text("Paso \(installer.step.rawValue + 1) de \(InstallStep.allCases.count): \(installer.step.title)")
+                Text("Step \(installer.step.rawValue + 1) of \(InstallStep.allCases.count): \(installer.step.title)")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                Text("El juego se ha vuelto a compilar correctamente.").foregroundStyle(.secondary)
+                Text("The game was compiled again successfully.").foregroundStyle(.secondary)
             }
             HStack {
                 Spacer()
                 if installer.running {
-                    Button("Cancelar") { installer.cancel() }
+                    Button("Cancel") { installer.cancel() }
                 } else {
-                    Button("Cerrar") { installer.reset(); dismiss() }.keyboardShortcut(.defaultAction)
+                    Button("Close") { installer.reset(); dismiss() }.keyboardShortcut(.defaultAction)
                 }
             }
         }

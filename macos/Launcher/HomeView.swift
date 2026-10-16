@@ -22,10 +22,10 @@ struct HomeView: View {
                     Text("Super Mario Galaxy")
                         .font(.title)
                         .fontWeight(.semibold)
-                    Text(runner.running ? "En ejecución" : "Wii · EE. UU. (RMGE01)")
+                    Text(runner.running ? L("Running") : L("Wii · USA (RMGE01)"))
                         .foregroundStyle(.secondary)
                     Button { runner.play() } label: {
-                        Text("Jugar").frame(minWidth: 110)
+                        Text("Play").frame(minWidth: 110)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
@@ -37,8 +37,8 @@ struct HomeView: View {
                             StatusLine(kind: .failure, text: message)
                         } else if settings.controlStyle == .controller && model.controllers.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
-                                StatusLine(kind: .warning, text: "No hay ningún mando conectado.")
-                                Button("Usar teclado y ratón") {
+                                StatusLine(kind: .warning, text: L("No controller is connected."))
+                                Button("Use keyboard and mouse") {
                                     settings.controlStyle = .keyboardMouse
                                     settings.save()
                                 }
@@ -46,13 +46,13 @@ struct HomeView: View {
                             }
                         } else if settings.controlStyle == .wiiRemote && model.wiiRemotes.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
-                                StatusLine(kind: .warning, text: "No hay ningún Wii Remote conectado.")
-                                Button("Cómo conectarlo") { showingWiiHelp = true }
+                                StatusLine(kind: .warning, text: L("No Wii Remote is connected."))
+                                Button("How to connect") { showingWiiHelp = true }
                                     .buttonStyle(.link)
                                     .popover(isPresented: $showingWiiHelp, arrowEdge: .bottom) { WiiRemotePairingHelp() }
                             }
                         } else {
-                            Text(" ")
+                            Text(verbatim: " ")
                         }
                     }
                     .font(.callout)
@@ -68,8 +68,8 @@ struct HomeView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer()
-                Button("Controles…") { showingControls = true }
-                SettingsLink { Text("Ajustes…") }
+                Button("Controls…") { showingControls = true }
+                SettingsLink { Text("Settings…") }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
@@ -82,14 +82,13 @@ struct HomeView: View {
     private var summary: String {
         var parts: [String] = []
         parts.append(settings.displayMode == .window
-                     ? "Ventana \(settings.windowWidth) × \(settings.windowHeight)" : "Pantalla completa")
+                     ? L("Window \(settings.windowWidth) × \(settings.windowHeight)") : DisplayMode.fullscreen.title)
         switch settings.controlStyle {
-        case .keyboardMouse: parts.append("Teclado y ratón")
-        case .controller: parts.append(model.controllers.first ?? "Mando")
-        case .auto: parts.append("Teclado, ratón y mandos")
-        case .wiiRemote: parts.append(model.wiiRemotes.isEmpty ? "Wii Remote" : "Wii Remote conectado")
+        case .keyboardMouse, .auto: parts.append(settings.controlStyle.title)
+        case .controller: parts.append(model.controllers.first ?? ControlStyle.controller.title)
+        case .wiiRemote: parts.append(model.wiiRemotes.isEmpty ? ControlStyle.wiiRemote.title : L("Wii Remote connected"))
         }
-        if settings.customTextures { parts.append("Texturas HD") }
+        if settings.customTextures { parts.append(L("HD textures")) }
         return parts.joined(separator: " · ")
     }
 }
@@ -103,9 +102,9 @@ struct ControlsSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Controles").font(.title2).fontWeight(.semibold)
+                Text("Controls").font(.title2).fontWeight(.semibold)
                 Spacer()
-                Picker("Dispositivo", selection: $initial) {
+                Picker("Device", selection: $initial) {
                     ForEach(ControllerKind.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -113,9 +112,9 @@ struct ControlsSheet: View {
                 .frame(width: 420)
             }
             Table(ControlsReference.rows(for: initial)) {
-                TableColumn("Acción", value: \.action).width(min: 170, ideal: 200)
-                TableColumn(initial.title, value: \.inputs).width(min: 200, ideal: 290)
-                TableColumn("Wii", value: \.wii).width(min: 100, ideal: 130)
+                TableColumn("Action", value: \.action).width(min: 170, ideal: 200)
+                TableColumn(initial.title, value: \.inputs).width(min: 200, ideal: 260)
+                TableColumn("Wii", value: \.wii).width(min: 120, ideal: 165)
             }
             HStack(alignment: .firstTextBaseline) {
                 Text(footnote)
@@ -123,7 +122,7 @@ struct ControlsSheet: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                Button("Cerrar") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button("Close") { dismiss() }.keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
@@ -131,8 +130,8 @@ struct ControlsSheet: View {
     }
 
     private var footnote: String {
-        var text = "Para reasignar botones, abre el menú del juego (F1) › CONTROLS durante la partida."
-        if initial == .playstation { text += " Los mandos de PlayStation usan la configuración de Xbox." }
+        var text = L("To remap buttons, open the game menu (F1) › CONTROLS during play.")
+        if initial == .playstation { text += " " + L("PlayStation controllers use the Xbox settings.") }
         return text
     }
 }

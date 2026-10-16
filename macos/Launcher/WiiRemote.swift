@@ -50,13 +50,11 @@ final class WiiRemoteWatcher {
 
 enum WiiRemoteHelp {
     static let steps = [
-        "Abre Ajustes del Sistema › Bluetooth.",
-        "Pulsa a la vez 1 y 2 en el Wii Remote (o el botón rojo SYNC, bajo la tapa de las pilas) hasta que parpadeen los LED.",
-        "Cuando aparezca «Nintendo RVL-CNT-01» (o «RVL-CNT-01-TR»), pulsa Conectar.",
+        L("Open System Settings › Bluetooth."),
+        L("Press 1 and 2 on the Wii Remote at the same time, or the red SYNC button under the battery cover, until the LEDs blink."),
+        L("When “Nintendo RVL-CNT-01” or “RVL-CNT-01-TR” appears, select Connect."),
     ]
-    static let sensorBar = "Para apuntar hace falta una barra de sensores encendida (USB o a pilas) junto a la pantalla. " +
-        "Conecta el Nunchuk antes de jugar. Si el Wii Remote se desconecta, pulsa uno de sus botones (o 1 y 2) " +
-        "para volver a conectarlo y el juego lo recupera."
+    static let sensorBar = L("Pointing needs a powered sensor bar (USB or battery) next to the display. Connect the Nunchuk before playing. If the Wii Remote disconnects, press one of its buttons, or 1 and 2, to connect it again and the game continues with it.")
     static let bluetoothSettings = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings")!
 }
 
@@ -68,10 +66,10 @@ struct WiiRemoteStatus: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             StatusLine(kind: connected ? .success : .info,
-                       text: connected ? "Wii Remote conectado. Enchufa el Nunchuk antes de jugar."
-                                       : "Empareja el Wii Remote en Ajustes del Sistema › Bluetooth antes de jugar.")
+                       text: connected ? L("Wii Remote connected. Plug in the Nunchuk before playing.")
+                                       : L("Pair the Wii Remote in System Settings › Bluetooth before playing."))
             Spacer()
-            Button("Cómo conectarlo…") { showingHelp = true }
+            Button("How to connect…") { showingHelp = true }
                 .popover(isPresented: $showingHelp, arrowEdge: .bottom) { WiiRemotePairingHelp() }
         }
         .font(.callout)
@@ -81,17 +79,17 @@ struct WiiRemoteStatus: View {
 struct WiiRemotePairingHelp: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Conectar un Wii Remote").font(.headline)
+            Text("Connect a Wii Remote").font(.headline)
             ForEach(Array(WiiRemoteHelp.steps.enumerated()), id: \.offset) { index, step in
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("\(index + 1).").monospacedDigit()
+                    Text(verbatim: "\(index + 1).").monospacedDigit()
                     Text(step).fixedSize(horizontal: false, vertical: true)
                 }
             }
             Text(WiiRemoteHelp.sensorBar)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Abrir ajustes de Bluetooth…") { NSWorkspace.shared.open(WiiRemoteHelp.bluetoothSettings) }
+            Button("Open Bluetooth settings…") { NSWorkspace.shared.open(WiiRemoteHelp.bluetoothSettings) }
         }
         .font(.callout)
         .padding(16)

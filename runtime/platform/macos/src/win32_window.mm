@@ -842,16 +842,23 @@ void run_application() {
         [menu_bar addItem:app_item];
         // The app's own name (the bundle's CFBundleName), as macOS shows it in the menu bar.
         NSString* name = NSRunningApplication.currentApplication.localizedName ?: @"Orbit";
+        // The menus follow the app's language: Spanish when the bundle offers it and the user
+        // prefers it (CFBundleLocalizations), English otherwise. AppKit renames the full-screen
+        // item itself ("Exit Full Screen") in the same language.
+        const bool spanish = [NSBundle.mainBundle.preferredLocalizations.firstObject hasPrefix:@"es"];
         NSMenu* app_menu = [[NSMenu alloc] initWithTitle:name];
-        [app_menu addItemWithTitle:[@"Hide " stringByAppendingString:name] action:@selector(hide:) keyEquivalent:@"h"];
+        [app_menu addItemWithTitle:[NSString stringWithFormat:spanish ? @"Ocultar %@" : @"Hide %@", name]
+                            action:@selector(hide:) keyEquivalent:@"h"];
         [app_menu addItem:[NSMenuItem separatorItem]];
-        [app_menu addItemWithTitle:[@"Quit " stringByAppendingString:name] action:@selector(terminate:) keyEquivalent:@"q"];
+        [app_menu addItemWithTitle:[NSString stringWithFormat:spanish ? @"Salir de %@" : @"Quit %@", name]
+                            action:@selector(terminate:) keyEquivalent:@"q"];
         app_item.submenu = app_menu;
         NSMenuItem* window_item = [[NSMenuItem alloc] init];
         [menu_bar addItem:window_item];
-        NSMenu* window_menu = [[NSMenu alloc] initWithTitle:@"Window"];
-        [window_menu addItemWithTitle:@"Minimize" action:@selector(performMiniaturize:) keyEquivalent:@"m"];
-        NSMenuItem* full_screen = [window_menu addItemWithTitle:@"Enter Full Screen"
+        NSMenu* window_menu = [[NSMenu alloc] initWithTitle:spanish ? @"Ventana" : @"Window"];
+        [window_menu addItemWithTitle:spanish ? @"Minimizar" : @"Minimize" action:@selector(performMiniaturize:)
+                        keyEquivalent:@"m"];
+        NSMenuItem* full_screen = [window_menu addItemWithTitle:spanish ? @"Entrar en pantalla completa" : @"Enter Full Screen"
                                                          action:@selector(toggleFullScreen:)
                                                   keyEquivalent:@"f"];
         full_screen.keyEquivalentModifierMask = NSEventModifierFlagControl | NSEventModifierFlagCommand;

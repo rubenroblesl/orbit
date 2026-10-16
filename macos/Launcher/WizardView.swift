@@ -2,7 +2,7 @@
 //
 // The setup assistant, laid out like the macOS Installer: the steps on the left, the current page
 // on the right and the navigation buttons along the bottom.
-//   Introducción -> Requisitos -> Juego -> Controles -> Resumen -> Instalación
+//   Introduction -> Requirements -> Game -> Controls -> Summary -> Installation
 
 import AppKit
 import GameController
@@ -53,7 +53,7 @@ struct WizardView: View {
             }
         }
         .onAppear {
-            // Back from Settings › Cambiar juego: straight to the game page.
+            // Back from Settings › Change game image: straight to the game page.
             if model.state.setupComplete && page == .welcome {
                 page = .game
                 controls = settings.controlStyle == .auto ? .controller : settings.controlStyle
@@ -67,19 +67,19 @@ struct WizardView: View {
     // MARK: Steps
 
     private static let steps: [(String, [WizardPage])] = [
-        ("Introducción", [.welcome]),
-        ("Requisitos", [.tools]),
-        ("Juego", [.game]),
-        ("Controles", [.controls]),
-        ("Resumen", [.ready]),
-        ("Instalación", [.installing, .done]),
+        (L("Introduction"), [.welcome]),
+        (L("Requirements"), [.tools]),
+        (L("Game"), [.game]),
+        (L("Controls"), [.controls]),
+        (L("Summary"), [.ready]),
+        (L("Installation"), [.installing, .done]),
     ]
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
                 Image(nsImage: .appIcon).resizable().frame(width: 36, height: 36)
-                Text("Orbit").font(.headline)
+                Text(verbatim: "Orbit").font(.headline)
             }
             .padding(.bottom, 26)
             ForEach(Array(Self.steps.enumerated()), id: \.offset) { index, step in
@@ -138,78 +138,78 @@ struct WizardView: View {
             switch page {
             case .welcome:
                 Spacer()
-                Button("Continuar") { begin() }
+                Button("Continue") { begin() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(checkingTools)
             case .tools:
-                Button("Atrás") { page = .welcome }
+                Button("Back") { page = .welcome }
                 Spacer()
                 if toolsReady {
-                    Button("Continuar") { page = .game }.keyboardShortcut(.defaultAction)
+                    Button("Continue") { page = .game }.keyboardShortcut(.defaultAction)
                 } else {
-                    Button("Instalar herramientas…") { installTools() }.keyboardShortcut(.defaultAction)
+                    Button("Install tools…") { installTools() }.keyboardShortcut(.defaultAction)
                 }
             case .game:
                 if model.state.setupComplete {
-                    Button("Cancelar") { model.screen = .home }
+                    Button("Cancel") { model.screen = .home }
                 } else {
-                    Button("Atrás") { page = .welcome }
+                    Button("Back") { page = .welcome }
                 }
                 Spacer()
-                Button("Continuar") { page = .controls }
+                Button("Continue") { page = .controls }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!(identification?.supported ?? false) && !(alreadyInstalled && image == nil))
             case .controls:
-                Button("Atrás") { page = .game }
+                Button("Back") { page = .game }
                 Spacer()
-                Button("Continuar") { page = .ready }.keyboardShortcut(.defaultAction)
+                Button("Continue") { page = .ready }.keyboardShortcut(.defaultAction)
             case .ready:
-                Button("Atrás") { page = .controls }
+                Button("Back") { page = .controls }
                 Spacer()
-                Button(needsInstall ? "Instalar" : "Guardar") { confirm() }.keyboardShortcut(.defaultAction)
+                Button(needsInstall ? L("Install") : L("Save")) { confirm() }.keyboardShortcut(.defaultAction)
             case .installing:
                 if installer.failure != nil {
-                    Button("Atrás") { installer.reset(); page = .game }
-                    Button("Mostrar registro") {
+                    Button("Back") { installer.reset(); page = .game }
+                    Button("Show log") {
                         NSWorkspace.shared.open(Paths.logs.appendingPathComponent("install.log"))
                     }
                     Spacer()
-                    Button("Reintentar") { installer.reset(); installer.start(image: image) }
+                    Button("Retry") { installer.reset(); installer.start(image: image) }
                         .keyboardShortcut(.defaultAction)
                 } else {
                     Spacer()
-                    Button("Cancelar") { installer.cancel() }
+                    Button("Cancel") { installer.cancel() }
                 }
             case .done:
                 Spacer()
-                Button("Continuar") { model.finishSetup(controls: controls) }.keyboardShortcut(.defaultAction)
+                Button("Continue") { model.finishSetup(controls: controls) }.keyboardShortcut(.defaultAction)
             }
         }
     }
 
-    // MARK: Introducción
+    // MARK: Introduction
 
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 18) {
-            PageHeader(title: "Instalación de Super Mario Galaxy",
-                       detail: "Orbit ejecuta Super Mario Galaxy de forma nativa en este Mac. Para instalarlo necesitas una copia del juego en su versión de EE. UU. (RMGE01). El proceso se realiza una sola vez.")
+            PageHeader(title: L("Install Super Mario Galaxy"),
+                       detail: L("Orbit runs Super Mario Galaxy natively on this Mac. To install it, you need a copy of the US version of the game (RMGE01). You only do this once."))
             GroupBox {
                 SummaryGrid(rows: [
-                    ("Ubicación", "~/Library/Application Support/Orbit"),
-                    ("Espacio", "12 GB durante la instalación, 3,5 GB después"),
-                    ("Duración", "Entre 3 y 15 minutos, según el equipo"),
+                    (L("Location"), "~/Library/Application Support/Orbit"),
+                    (L("Disk space"), L("12 GB during installation, 3.5 GB afterwards")),
+                    (L("Time"), L("3 to 15 minutes, depending on the Mac")),
                 ])
                 .padding(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             if runningFromDiskImage {
-                StatusLine(kind: .info, text: "Orbit se está ejecutando desde la imagen de disco. Para el uso habitual, cópiala antes a la carpeta Aplicaciones.")
+                StatusLine(kind: .info, text: L("Orbit is running from the disk image. Copy it to the Applications folder before regular use."))
                     .foregroundStyle(.secondary)
             }
             if checkingTools {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Comprobando requisitos…").foregroundStyle(.secondary)
+                    Text("Checking requirements…").foregroundStyle(.secondary)
                 }
             }
         }
@@ -230,23 +230,23 @@ struct WizardView: View {
         }
     }
 
-    // MARK: Requisitos
+    // MARK: Requirements
 
     private var tools: some View {
         VStack(alignment: .leading, spacing: 18) {
-            PageHeader(title: "Herramientas de línea de comandos",
-                       detail: "Orbit compila el juego en este Mac con las herramientas de línea de comandos de Apple. Son gratuitas y se instalan desde macOS.")
+            PageHeader(title: L("Command line tools"),
+                       detail: L("Orbit compiles the game on this Mac with Apple’s command line tools. They are free and macOS installs them."))
             if toolsReady {
-                StatusLine(kind: .success, text: "Las herramientas están instaladas.")
+                StatusLine(kind: .success, text: L("The tools are installed."))
             } else {
-                StatusLine(kind: .warning, text: "Las herramientas no están instaladas.")
-                Text("Selecciona «Instalar herramientas…» y confirma la instalación en el cuadro de diálogo de Apple. Esta página detecta automáticamente cuándo termina.")
+                StatusLine(kind: .warning, text: L("The tools are not installed."))
+                Text("Select “Install tools…” and confirm the installation in Apple’s dialog. This page detects when it finishes.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if waitingForTools {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
-                        Text("Esperando a que finalice la instalación…").foregroundStyle(.secondary)
+                        Text("Waiting for the installation to finish…").foregroundStyle(.secondary)
                     }
                 }
             }
@@ -266,23 +266,23 @@ struct WizardView: View {
         }
     }
 
-    // MARK: Juego
+    // MARK: Game
 
     private var game: some View {
         VStack(alignment: .leading, spacing: 18) {
-            PageHeader(title: "Imagen del juego",
-                       detail: "Selecciona la imagen de disco de Super Mario Galaxy. Solo se lee durante la instalación. Después puedes borrarla.")
+            PageHeader(title: L("Game image"),
+                       detail: L("Select the Super Mario Galaxy disc image. Orbit only reads it during installation, so you can delete it afterwards."))
             dropArea
             if image != nil, let identification, !identifying {
                 if identification.supported {
-                    StatusLine(kind: .success, text: "Super Mario Galaxy, EE. UU. (RMGE01), revisión 0.")
+                    StatusLine(kind: .success, text: L("Super Mario Galaxy, USA (RMGE01), revision 0."))
                 } else {
                     StatusLine(kind: .failure, text: unsupportedHelp(identification))
                 }
             } else if alreadyInstalled && image == nil {
-                StatusLine(kind: .info, text: "El juego ya está instalado. Puedes continuar sin seleccionar un archivo o elegir otro para reinstalarlo.")
+                StatusLine(kind: .info, text: L("The game is already installed. Continue without selecting a file, or choose another one to reinstall the game."))
             }
-            Text("Formatos admitidos: WBFS, ISO, RVZ, WIA, CISO, GCZ o una carpeta extraída.")
+            Text("Supported formats: WBFS, ISO, RVZ, WIA, CISO, GCZ or an extracted folder.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -292,13 +292,13 @@ struct WizardView: View {
         VStack(spacing: 10) {
             if identifying {
                 ProgressView().controlSize(.small)
-                Text("Verificando el archivo…").foregroundStyle(.secondary)
+                Text("Checking the file…").foregroundStyle(.secondary)
             } else {
                 Image(systemName: "opticaldisc")
                     .font(.system(size: 26, weight: .light))
                     .foregroundStyle(.secondary)
-                Text(image?.lastPathComponent ?? "Arrastra aquí la imagen del disco")
-                Button(image == nil ? "Elegir…" : "Elegir otro…") { chooseFile() }
+                Text(image?.lastPathComponent ?? L("Drag the disc image here"))
+                Button(image == nil ? L("Choose…") : L("Choose another…")) { chooseFile() }
             }
         }
         .frame(maxWidth: .infinity, minHeight: 150)
@@ -320,17 +320,17 @@ struct WizardView: View {
 
     private func unsupportedHelp(_ identification: Installer.Identification) -> String {
         let summary = identification.summary
-        if summary.contains("RMGP01") { return "Es la versión europea (RMGP01). Se necesita la versión de EE. UU. (RMGE01)." }
-        if summary.contains("RMGJ01") { return "Es la versión japonesa (RMGJ01). Se necesita la versión de EE. UU. (RMGE01)." }
-        if summary.contains("RMGK01") { return "Es la versión coreana (RMGK01). Se necesita la versión de EE. UU. (RMGE01)." }
-        if summary.contains("RMGE01") { return "Es otra revisión del disco. Se necesita la revisión 0 de EE. UU." }
-        return "No se reconoce el archivo como Super Mario Galaxy. (\(summary))"
+        if summary.contains("RMGP01") { return L("This is the European version (RMGP01). Orbit needs the US version (RMGE01).") }
+        if summary.contains("RMGJ01") { return L("This is the Japanese version (RMGJ01). Orbit needs the US version (RMGE01).") }
+        if summary.contains("RMGK01") { return L("This is the Korean version (RMGK01). Orbit needs the US version (RMGE01).") }
+        if summary.contains("RMGE01") { return L("This is another revision of the disc. Orbit needs revision 0 of the US version.") }
+        return L("The file is not recognized as Super Mario Galaxy. (\(summary))")
     }
 
     private func chooseFile() {
         let panel = NSOpenPanel()
-        panel.message = "Selecciona la imagen de disco de Super Mario Galaxy"
-        panel.prompt = "Elegir"
+        panel.message = L("Select the Super Mario Galaxy disc image")
+        panel.prompt = L("Choose")
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
@@ -348,25 +348,25 @@ struct WizardView: View {
         }
     }
 
-    // MARK: Controles
+    // MARK: Controls
 
     private var controlsPage: some View {
         VStack(alignment: .leading, spacing: 18) {
-            PageHeader(title: "Método de control",
-                       detail: "Se puede cambiar en cualquier momento en Ajustes.")
+            PageHeader(title: L("Control method"),
+                       detail: L("You can change it at any time in Settings."))
             VStack(spacing: 0) {
-                choice(.keyboardMouse, symbol: "keyboard", title: "Teclado y ratón",
-                       detail: "Mueve a Mario con WASD y apunta con el ratón.")
+                choice(.keyboardMouse, symbol: "keyboard", title: ControlStyle.keyboardMouse.title,
+                       detail: L("Move Mario with WASD and point with the mouse."))
                 Divider().padding(.leading, 54)
-                choice(.controller, symbol: "gamecontroller", title: "Mando",
+                choice(.controller, symbol: "gamecontroller", title: ControlStyle.controller.title,
                        detail: model.controllers.isEmpty
-                           ? "Xbox, PlayStation o Switch Pro, por Bluetooth o USB. No hay ningún mando conectado."
-                           : "Xbox, PlayStation o Switch Pro. Conectado: \(model.controllers.joined(separator: ", ")).")
+                           ? L("Xbox, PlayStation or Switch Pro, over Bluetooth or USB. No controller is connected.")
+                           : L("Xbox, PlayStation or Switch Pro. Connected: \(model.controllers.joined(separator: ", "))."))
                 Divider().padding(.leading, 54)
-                choice(.wiiRemote, symbol: "av.remote", title: "Wii Remote",
+                choice(.wiiRemote, symbol: "av.remote", title: ControlStyle.wiiRemote.title,
                        detail: model.wiiRemotes.isEmpty
-                           ? "Wii Remote y Nunchuk originales, por Bluetooth. No hay ningún Wii Remote conectado."
-                           : "Wii Remote y Nunchuk originales. Conectado: \(model.wiiRemotes.joined(separator: ", ")).",
+                           ? L("Original Wii Remote and Nunchuk, over Bluetooth. No Wii Remote is connected.")
+                           : L("Original Wii Remote and Nunchuk. Connected: \(model.wiiRemotes.joined(separator: ", "))."),
                        enabled: ControlStyle.wiiRemoteAvailable)
             }
             .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.03)))
@@ -404,21 +404,21 @@ struct WizardView: View {
         .opacity(enabled ? 1 : 0.5)
     }
 
-    // MARK: Resumen
+    // MARK: Summary
 
     private var needsInstall: Bool { image != nil && (identification?.supported ?? false) }
 
     private var ready: some View {
         VStack(alignment: .leading, spacing: 18) {
-            PageHeader(title: "Resumen",
-                       detail: "Se aplicará la siguiente configuración. Todo puede modificarse después en Ajustes.")
+            PageHeader(title: L("Summary"),
+                       detail: L("Orbit applies the settings below. You can change all of them later in Settings."))
             GroupBox {
                 SummaryGrid(rows: summaryRows)
                     .padding(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if needsInstall {
-                Text("La instalación tarda entre 3 y 15 minutos. Durante la compilación el equipo puede ir más lento.")
+                Text("Installation takes 3 to 15 minutes. The Mac may run slower while the game compiles.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -428,16 +428,16 @@ struct WizardView: View {
 
     private var summaryRows: [(String, String)] {
         var rows: [(String, String)] = []
-        if let image, needsInstall { rows.append(("Juego", image.lastPathComponent)) }
-        rows.append(("Pantalla", "Pantalla completa, \(screenResolution)"))
-        rows.append(("Proporción", "Automática (adaptada a la pantalla)"))
-        rows.append(("Texturas HD", Settings.texturesAvailable ? "Activadas, con precarga" : "No disponibles"))
-        rows.append(("Controles", controls.title))
+        if let image, needsInstall { rows.append((L("Game"), image.lastPathComponent)) }
+        rows.append((L("Display"), L("Full screen, \(screenResolution)")))
+        rows.append((L("Aspect ratio"), L("Automatic (fits the display)")))
+        rows.append((L("HD textures"), Settings.texturesAvailable ? L("On, preloaded") : L("Not available")))
+        rows.append((L("Controls"), controls.title))
         return rows
     }
 
     private var screenResolution: String {
-        guard let screen = NSScreen.main else { return "resolución de la pantalla" }
+        guard let screen = NSScreen.main else { return L("display resolution") }
         return "\(Int(screen.frame.width * screen.backingScaleFactor)) × \(Int(screen.frame.height * screen.backingScaleFactor))"
     }
 
@@ -452,14 +452,14 @@ struct WizardView: View {
         }
     }
 
-    // MARK: Instalación
+    // MARK: Installation
 
     @ViewBuilder
     private var installing: some View {
         if let failure = installer.failure {
             VStack(alignment: .leading, spacing: 16) {
-                PageHeader(title: "No se pudo completar la instalación")
-                StatusLine(kind: .failure, text: failure.errorDescription ?? "Error desconocido.")
+                PageHeader(title: L("The installation could not be completed"))
+                StatusLine(kind: .failure, text: failure.errorDescription ?? L("Unknown error."))
                     .textSelection(.enabled)
                 Text(failureAdvice(failure))
                     .foregroundStyle(.secondary)
@@ -467,13 +467,13 @@ struct WizardView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 16) {
-                PageHeader(title: "Instalando Super Mario Galaxy")
+                PageHeader(title: L("Installing Super Mario Galaxy"))
                 VStack(alignment: .leading, spacing: 6) {
                     ProgressView(value: installer.overallProgress)
                     HStack {
-                        Text("Paso \(installer.step.rawValue + 1) de \(InstallStep.allCases.count): \(installer.step.title)")
+                        Text("Step \(installer.step.rawValue + 1) of \(InstallStep.allCases.count): \(installer.step.title)")
                         Spacer()
-                        Text("\(Int((installer.overallProgress * 100).rounded())) %")
+                        Text(installer.overallProgress, format: .percent.precision(.fractionLength(0)))
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
@@ -512,30 +512,30 @@ struct WizardView: View {
     private func failureAdvice(_ failure: InstallError) -> String {
         switch failure {
         case .toolsMissing:
-            return "Instala las herramientas de línea de comandos de Apple y vuelve a intentarlo."
+            return L("Install Apple’s command line tools and try again.")
         case .notEnoughSpace:
-            return "Libera espacio en el disco y selecciona Reintentar."
+            return L("Free up disk space and select Retry.")
         case .notSupported:
-            return "Selecciona otra imagen del juego."
+            return L("Select another game image.")
         case .cancelled:
-            return "Puedes reanudarla con Reintentar."
+            return L("Select Retry to resume it.")
         case .commandFailed:
-            return "Selecciona Reintentar. Si el error se repite, el registro contiene los detalles."
+            return L("Select Retry. If the error happens again, the log has the details.")
         }
     }
 
-    // MARK: Terminado
+    // MARK: Done
 
     private var done: some View {
         VStack(alignment: .leading, spacing: 18) {
-            PageHeader(title: "Instalación completada",
-                       detail: "Super Mario Galaxy está listo. Estos son los controles principales. La lista completa está en Controles.")
+            PageHeader(title: L("Installation complete"),
+                       detail: L("Super Mario Galaxy is ready. These are the main controls. The full list is in Controls."))
             GroupBox {
                 SummaryGrid(rows: quickControls)
                     .padding(6)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Text("Durante la partida, F1 abre el menú del juego (fn + F1 en portátiles) y ⌘Q cierra el juego.")
+            Text("During play, F1 opens the game menu (fn + F1 on laptops) and ⌘Q quits the game.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

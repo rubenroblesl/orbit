@@ -70,10 +70,10 @@ enum ControlStyle: String, CaseIterable, Identifiable, Codable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .auto: return "Teclado, ratón y mandos"
-        case .keyboardMouse: return "Teclado y ratón"
-        case .controller: return "Mando"
-        case .wiiRemote: return "Wii Remote"
+        case .auto: return L("Keyboard, mouse and controllers")
+        case .keyboardMouse: return L("Keyboard and mouse")
+        case .controller: return L("Controller")
+        case .wiiRemote: return L("Wii Remote")
         }
     }
     // Wii Remotes paired over Bluetooth reach the game through the runtime's IOKit HID bridge.
@@ -83,21 +83,21 @@ enum ControlStyle: String, CaseIterable, Identifiable, Codable {
 enum DisplayMode: Int, CaseIterable, Identifiable {
     case window = 0, fullscreen = 1
     var id: Int { rawValue }
-    var title: String { self == .fullscreen ? "Pantalla completa" : "Ventana" }
+    var title: String { self == .fullscreen ? L("Full screen") : L("Window") }
 }
 
 enum AspectChoice: Int, CaseIterable, Identifiable {
     case auto = 0, fourThree, sixteenTen, sixteenNine, twentyOneNine, thirtyTwoNine
     var id: Int { rawValue }
     var title: String {
-        ["Automática", "4:3 (original)", "16:10", "16:9", "21:9", "32:9"][rawValue]
+        [L("Automatic"), L("4:3 (original)"), "16:10", "16:9", "21:9", "32:9"][rawValue]
     }
 }
 
 enum AntiAliasing: Int, CaseIterable, Identifiable {
     case off = 0, smaa, auto, fxaa
     var id: Int { rawValue }
-    var title: String { ["Desactivado", "SMAA", "Automático", "FXAA"][rawValue] }
+    var title: String { [L("Off"), "SMAA", L("Auto"), "FXAA"][rawValue] }
 }
 
 // MARK: - Settings model

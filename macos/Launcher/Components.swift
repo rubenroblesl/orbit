@@ -6,6 +6,11 @@
 import AppKit
 import SwiftUI
 
+// Text for the current language from the app's Localizable.strings. English is the source
+// language (the key); es.lproj has the Spanish text. SwiftUI's Text, Button and Label look up
+// string literals themselves, so this is for text kept in a String first.
+func L(_ text: String.LocalizationValue) -> String { String(localized: text) }
+
 // A page title with its explanation underneath.
 struct PageHeader: View {
     let title: String

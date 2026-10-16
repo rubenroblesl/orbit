@@ -11,7 +11,7 @@ enum ControllerKind: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .keyboard: return "Teclado y ratón"
+        case .keyboard: return L("Keyboard and mouse")
         case .xbox: return "Xbox"
         case .playstation: return "PlayStation"
         case .switchPro: return "Switch Pro"
@@ -49,21 +49,21 @@ enum ControlsReference {
     }
 
     private static let entries: [Entry] = [
-        Entry(targets: ["stick_up", "stick_down", "stick_left", "stick_right"], action: "Movimiento", wii: "Stick del Nunchuk"),
-        Entry(targets: ["a"], action: "Saltar / Aceptar", wii: "A"),
-        Entry(targets: ["jump_back"], action: "Saltar / Atrás en menús", wii: "A / B"),
-        Entry(targets: ["shake"], action: "Giro", wii: "Agitar Wii Remote"),
-        Entry(targets: ["z"], action: "Agacharse", wii: "Z"),
-        Entry(targets: ["b"], action: "Disparar fragmentos de estrella", wii: "B"),
-        Entry(targets: ["c"], action: "Centrar la cámara", wii: "C"),
-        Entry(targets: ["pointer_up", "pointer_down", "pointer_left", "pointer_right"], action: "Puntero", wii: "Apuntar"),
-        Entry(targets: ["pointer_recenter"], action: "Centrar el puntero", wii: "Sin equivalente"),
-        Entry(targets: ["dpad_up", "dpad_down", "dpad_left", "dpad_right"], action: "Cámara / Primera persona", wii: "Cruceta"),
-        Entry(targets: ["plus"], action: "Pausa", wii: "+"),
-        Entry(targets: ["minus"], action: "Botón −", wii: "−"),
-        Entry(targets: ["home"], action: "Menú HOME", wii: "HOME"),
-        Entry(targets: ["one"], action: "Botón 1", wii: "1"),
-        Entry(targets: ["two"], action: "Botón 2", wii: "2"),
+        Entry(targets: ["stick_up", "stick_down", "stick_left", "stick_right"], action: L("Move"), wii: L("Nunchuk stick")),
+        Entry(targets: ["a"], action: L("Jump / Confirm"), wii: "A"),
+        Entry(targets: ["jump_back"], action: L("Jump / Back in menus"), wii: "A / B"),
+        Entry(targets: ["shake"], action: L("Spin"), wii: L("Shake the Wii Remote")),
+        Entry(targets: ["z"], action: L("Crouch"), wii: "Z"),
+        Entry(targets: ["b"], action: L("Shoot Star Bits"), wii: "B"),
+        Entry(targets: ["c"], action: L("Center the camera"), wii: "C"),
+        Entry(targets: ["pointer_up", "pointer_down", "pointer_left", "pointer_right"], action: L("Pointer"), wii: L("Point at the screen")),
+        Entry(targets: ["pointer_recenter"], action: L("Recenter the pointer"), wii: L("No equivalent")),
+        Entry(targets: ["dpad_up", "dpad_down", "dpad_left", "dpad_right"], action: L("Camera / First person"), wii: L("D-pad")),
+        Entry(targets: ["plus"], action: L("Pause"), wii: "+"),
+        Entry(targets: ["minus"], action: L("− Button"), wii: "−"),
+        Entry(targets: ["home"], action: L("HOME Menu"), wii: "HOME"),
+        Entry(targets: ["one"], action: L("1 Button"), wii: "1"),
+        Entry(targets: ["two"], action: L("2 Button"), wii: "2"),
     ]
 
     private static let defaults: [String: [String: String]] = [
@@ -112,12 +112,12 @@ enum ControlsReference {
             }
             if entry.targets[0] == "pointer_up" {
                 switch kind {
-                case .keyboard: text = text.isEmpty ? "Ratón" : "Ratón · " + text
-                case .switchPro: text = "Giroscopio" + (text.isEmpty ? "" : " · " + text)
+                case .keyboard: text = text.isEmpty ? L("Mouse") : L("Mouse") + " · " + text
+                case .switchPro: text = L("Gyro") + (text.isEmpty ? "" : " · " + text)
                 default: break
                 }
             }
-            if entry.targets[0] == "shake" && kind == .switchPro { text += " · agitar el mando" }
+            if entry.targets[0] == "shake" && kind == .switchPro { text += " · " + L("shake the controller") }
             if text.isEmpty { continue }
             rows.append(ControlRow(id: entry.targets[0], action: entry.action, wii: entry.wii, inputs: text))
         }
@@ -128,10 +128,8 @@ enum ControlsReference {
     // up-left-down-right order (W A S D, ↑ ← ↓ →).
     private static func directions(_ lists: [[String]], kind: ControllerKind) -> String {
         let groups = lists.map { Set($0.map(group)) }
-        if let first = groups.first, !first.contains(""), groups.allSatisfy({ $0 == first }) {
-            let order = ["Stick izquierdo", "Cruceta", "Stick derecho"]
-            return first.sorted { (order.firstIndex(of: $0) ?? 9) < (order.firstIndex(of: $1) ?? 9) }
-                .joined(separator: " · ")
+        if let first = groups.first, !first.contains(.none), groups.allSatisfy({ $0 == first }) {
+            return first.sorted { $0.rawValue < $1.rawValue }.map(\.title).joined(separator: " · ")
         }
         guard lists.count == 4 else { return "" }
         let ordered = [lists[0], lists[2], lists[1], lists[3]]
@@ -139,11 +137,24 @@ enum ControlsReference {
         return firsts.joined(separator: " ")
     }
 
-    private static func group(_ token: String) -> String {
-        if token.hasPrefix("LX") || token.hasPrefix("LY") { return "Stick izquierdo" }
-        if token.hasPrefix("RX") || token.hasPrefix("RY") { return "Stick derecho" }
-        if token.hasPrefix("Dpad") { return "Cruceta" }
-        return ""
+    // The stick or pad a binding belongs to, in display order.
+    private enum InputGroup: Int {
+        case leftStick, dpad, rightStick, none
+        var title: String {
+            switch self {
+            case .leftStick: return L("Left stick")
+            case .dpad: return L("D-pad")
+            case .rightStick: return L("Right stick")
+            case .none: return ""
+            }
+        }
+    }
+
+    private static func group(_ token: String) -> InputGroup {
+        if token.hasPrefix("LX") || token.hasPrefix("LY") { return .leftStick }
+        if token.hasPrefix("RX") || token.hasPrefix("RY") { return .rightStick }
+        if token.hasPrefix("Dpad") { return .dpad }
+        return .none
     }
 
     private static func unique(_ names: [String]) -> [String] {
@@ -162,33 +173,35 @@ enum ControlsReference {
 
     private static func keyName(_ token: String) -> String {
         let names: [String: String] = [
-            "Space": "Espacio", "Enter": "Return", "Tab": "Tab", "Backspace": "Borrar", "Escape": "Esc",
-            "MouseLeft": "Clic izquierdo", "MouseRight": "Clic derecho", "MouseMiddle": "Clic central",
-            "Mouse4": "Botón 4 del ratón", "Mouse5": "Botón 5 del ratón",
-            "LShift": "⇧ Mayús", "RShift": "⇧ Mayús derecha", "Shift": "⇧ Mayús",
-            "LCtrl": "⌃ Control", "RCtrl": "⌃ Control derecha", "Ctrl": "⌃ Control",
-            "LAlt": "⌥ Opción", "RAlt": "⌥ Opción derecha", "Alt": "⌥ Opción",
+            "Space": L("Space"), "Enter": "Return", "Tab": "Tab", "Backspace": L("Delete"), "Escape": "Esc",
+            "MouseLeft": L("Left click"), "MouseRight": L("Right click"), "MouseMiddle": L("Middle click"),
+            "Mouse4": L("Mouse button 4"), "Mouse5": L("Mouse button 5"),
+            "LShift": L("⇧ Shift"), "RShift": L("⇧ Right Shift"), "Shift": L("⇧ Shift"),
+            "LCtrl": L("⌃ Control"), "RCtrl": L("⌃ Right Control"), "Ctrl": L("⌃ Control"),
+            "LAlt": L("⌥ Option"), "RAlt": L("⌥ Right Option"), "Alt": L("⌥ Option"),
             "Up": "↑", "Down": "↓", "Left": "←", "Right": "→",
             "Equals": "=", "Minus": "-", "LBracket": "[", "RBracket": "]", "Backslash": "\\",
             "Semicolon": ";", "Quote": "'", "Comma": ",", "Period": ".", "Slash": "/", "Grave": "`",
-            "CapsLock": "Bloq Mayús",
+            "CapsLock": L("Caps Lock"),
         ]
         if let name = names[token] { return name }
-        if token.hasPrefix("Num"), token.count == 4 { return "\(token.suffix(1)) (teclado numérico)" }
+        if token.hasPrefix("Num"), token.count == 4 { return L("\(String(token.suffix(1))) (keypad)") }
         return token
     }
 
+    private static func dpad(_ arrow: String) -> String { InputGroup.dpad.title + " " + arrow }
+
     private static func axisName(_ token: String) -> String? {
         let group = group(token)
-        return group.isEmpty || group == "Cruceta" ? nil : group
+        return group == .leftStick || group == .rightStick ? group.title : nil
     }
 
     private static func xboxName(_ token: String) -> String {
         if let axis = axisName(token) { return axis }
         let names: [String: String] = [
-            "LS": "Clic del stick izquierdo (LS)", "RS": "Clic del stick derecho (RS)",
-            "Menu": "Menú ☰", "View": "Vista ⧉", "Guide": "Xbox",
-            "DpadUp": "Cruceta ↑", "DpadDown": "Cruceta ↓", "DpadLeft": "Cruceta ←", "DpadRight": "Cruceta →",
+            "LS": L("Left stick click (LS)"), "RS": L("Right stick click (RS)"),
+            "Menu": L("Menu ☰"), "View": L("View ⧉"), "Guide": "Xbox",
+            "DpadUp": dpad("↑"), "DpadDown": dpad("↓"), "DpadLeft": dpad("←"), "DpadRight": dpad("→"),
         ]
         return names[token] ?? token
     }
@@ -198,9 +211,9 @@ enum ControlsReference {
         let names: [String: String] = [
             "A": "✕", "B": "○", "X": "□", "Y": "△",
             "LB": "L1", "RB": "R1", "LT": "L2", "RT": "R2",
-            "LS": "Clic del stick izquierdo (L3)", "RS": "Clic del stick derecho (R3)",
-            "Menu": "Options", "View": "Create", "Guide": "PS", "Share": "Panel táctil",
-            "DpadUp": "Cruceta ↑", "DpadDown": "Cruceta ↓", "DpadLeft": "Cruceta ←", "DpadRight": "Cruceta →",
+            "LS": L("Left stick click (L3)"), "RS": L("Right stick click (R3)"),
+            "Menu": "Options", "View": "Create", "Guide": "PS", "Share": L("Touchpad"),
+            "DpadUp": dpad("↑"), "DpadDown": dpad("↓"), "DpadLeft": dpad("←"), "DpadRight": dpad("→"),
         ]
         return names[token] ?? token
     }
@@ -208,9 +221,9 @@ enum ControlsReference {
     private static func switchName(_ token: String) -> String {
         if let axis = axisName(token) { return axis }
         let names: [String: String] = [
-            "LS": "Clic del stick izquierdo", "RS": "Clic del stick derecho",
-            "Plus": "+", "Minus": "−", "Home": "HOME", "Capture": "Captura",
-            "DpadUp": "Cruceta ↑", "DpadDown": "Cruceta ↓", "DpadLeft": "Cruceta ←", "DpadRight": "Cruceta →",
+            "LS": L("Left stick click"), "RS": L("Right stick click"),
+            "Plus": "+", "Minus": "−", "Home": "HOME", "Capture": L("Capture"),
+            "DpadUp": dpad("↑"), "DpadDown": dpad("↓"), "DpadLeft": dpad("←"), "DpadRight": dpad("→"),
         ]
         return names[token] ?? token
     }
