@@ -1,4 +1,4 @@
-# Orbit
+# Orbit: Super Mario Galaxy for Mac
 
 Orbit runs **Super Mario Galaxy** natively on Macs with Apple Silicon. It is the macOS port of
 [Nebula](https://github.com/keepvaibin/nebula) by keepvaibin, which translates the game's
@@ -7,7 +7,8 @@ copy of the game and runs it with a Metal renderer and macOS audio and input.
 
 Orbit contains no Nintendo code, game files or disc images. You need your own copy of the game.
 
-[Download](../../releases/latest) · [Controls](docs/KEYBOARD_CONTROLS.md) ·
+[Download](../../releases/latest) · [Website](https://rubenroblesl.github.io/orbit/) ·
+[Controls](docs/KEYBOARD_CONTROLS.md) ·
 [Nebula's documentation](docs/NEBULA-README.md) · [Third-party notices](THIRD-PARTY-NOTICES.md)
 
 Not affiliated with or endorsed by Nintendo.
