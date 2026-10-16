@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://rubenroblesl.github.io/orbit/sitemap.xml

@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orbit: Super Mario Galaxy for Mac (Apple Silicon)</title>
+  <meta name="description" content="Orbit is a free, open source macOS port of Super Mario Galaxy for Macs with Apple Silicon, based on the Nebula recompilation. It builds the game on your Mac from your own copy.">
+  <link rel="canonical" href="https://rubenroblesl.github.io/orbit/">
+  <meta name="theme-color" content="#0e1d4f">
+  <link rel="icon" type="image/png" href="img/favicon.png">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Orbit">
+  <meta property="og:title" content="Orbit: Super Mario Galaxy for Mac">
+  <meta property="og:description" content="A free, open source native macOS port of Super Mario Galaxy for Apple Silicon, based on Nebula. Bring your own copy of the game.">
+  <meta property="og:url" content="https://rubenroblesl.github.io/orbit/">
+  <meta property="og:image" content="https://rubenroblesl.github.io/orbit/img/og-image.png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@700&family=Red+Hat+Text:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="styles.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Orbit",
+    "description": "A native macOS port of Super Mario Galaxy for Apple Silicon, based on the Nebula recompilation. It requires your own copy of the game.",
+    "applicationCategory": "GameApplication",
+    "operatingSystem": "macOS 14 or later (Apple Silicon)",
+    "softwareVersion": "0.1.0",
+    "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "downloadUrl": "https://github.com/rubenroblesl/orbit/releases/latest/download/Orbit.dmg",
+    "codeRepository": "https://github.com/rubenroblesl/orbit",
+    "url": "https://rubenroblesl.github.io/orbit/",
+    "image": "https://rubenroblesl.github.io/orbit/img/og-image.png",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+
+  <div class="band">
+    <header class="wrap masthead">
+      <a class="wordmark" href="./"><img src="img/icon.png" alt="" width="36" height="36">Orbit</a>
+      <nav aria-label="Sections">
+        <ul>
+          <li><a href="#install">Install</a></li>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#app">The app</a></li>
+          <li><a href="#credits">Credits</a></li>
+          <li><a href="https://github.com/rubenroblesl/orbit">GitHub</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <div class="wrap intro">
+      <div>
+        <h1>Super Mario Galaxy for Mac</h1>
+        <p class="lede">Orbit runs Super Mario Galaxy natively on Macs with Apple Silicon. It is the macOS port of Nebula, which translates the game’s code to C++ ahead of time. Orbit compiles that code on your Mac from your own copy of the game.</p>
+        <div class="actions">
+          <a class="button button-primary" href="https://github.com/rubenroblesl/orbit/releases/latest/download/Orbit.dmg">Download Orbit 0.1.0</a>
+          <a class="button button-secondary" href="https://github.com/rubenroblesl/orbit">View the source</a>
+        </div>
+        <p class="facts">macOS 14 or later, Apple Silicon. Free and open source under <span class="nowrap">GPL-3.0</span>. Orbit includes no game files.</p>
+      </div>
+      <img class="window" src="img/summary.png" width="1400" height="940"
+           alt="The Orbit setup assistant showing the summary page: full screen at 3456 by 2234, automatic aspect ratio, HD textures on and keyboard and mouse controls.">
+    </div>
+  </div>
+
+  <main id="content" class="wrap">
+    <section id="install" aria-labelledby="install-title">
+      <div class="section-head">
+        <h2 id="install-title">Install Orbit</h2>
+        <p>You need your own copy of Super Mario Galaxy, USA version (RMGE01), revision 0. Orbit only reads it during installation.</p>
+      </div>
+      <div class="install">
+        <ol class="steps">
+          <li>
+            <h3>Download</h3>
+            <p>Download <a href="https://github.com/rubenroblesl/orbit/releases/latest/download/Orbit.dmg">Orbit.dmg</a>, open it and drag Orbit to the Applications folder.</p>
+          </li>
+          <li>
+            <h3>Open Orbit</h3>
+            <p>Orbit is not signed with an Apple developer certificate, so macOS blocks the first launch. Open System Settings, go to Privacy &amp; Security and select Open Anyway.</p>
+          </li>
+          <li>
+            <h3>Add the game</h3>
+            <p>Drag your disc image into the setup assistant. WBFS, ISO, RVZ, WIA, CISO and GCZ images and extracted folders work.</p>
+          </li>
+          <li>
+            <h3>Play</h3>
+            <p>Choose how you want to play. The assistant installs Apple’s command line tools if they are missing and compiles the game in 3 to 15 minutes.</p>
+          </li>
+        </ol>
+        <aside class="requirements" aria-labelledby="requirements-title">
+          <h3 id="requirements-title">Requirements</h3>
+          <dl>
+            <div><dt>Mac</dt><dd>Apple Silicon</dd></div>
+            <div><dt>System</dt><dd>macOS 14 Sonoma or later</dd></div>
+            <div><dt>Game</dt><dd>Super Mario Galaxy, USA (RMGE01), revision 0</dd></div>
+            <div><dt>Disk space</dt><dd>12 GB during installation, 3.5 GB afterwards</dd></div>
+          </dl>
+          <p class="tested">Tested on a MacBook Pro with M5 Pro and macOS 27.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section id="features" aria-labelledby="features-title">
+      <div class="section-head">
+        <h2 id="features-title">What Orbit includes</h2>
+      </div>
+      <dl class="features">
+        <div>
+          <dt>A setup assistant</dt>
+          <dd>It checks your copy of the game, installs Apple’s command line tools when needed, compiles the game and applies recommended settings.</dd>
+        </div>
+        <div>
+          <dt>Native full screen</dt>
+          <dd>The game opens in its own Space. The green title bar button or Control-Command-F switches it to a window.</dd>
+        </div>
+        <div>
+          <dt>Any display shape</dt>
+          <dd>The picture adapts to the display, including MacBook displays taller than 16:9, without stretched menus.</dd>
+        </div>
+        <div>
+          <dt>HD textures</dt>
+          <dd>Community HD textures and an HD HUD are included and preloaded to avoid stutter.</dd>
+        </div>
+        <div>
+          <dt>Your controller</dt>
+          <dd>Keyboard and mouse, Xbox and PlayStation controllers and Switch Pro controllers. Real Wii Remotes over Bluetooth are experimental.</dd>
+        </div>
+        <div>
+          <dt>English and Spanish</dt>
+          <dd>The app follows the language of your Mac.</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section id="app" aria-labelledby="app-title">
+      <div class="section-head">
+        <h2 id="app-title">The app</h2>
+        <p>Orbit follows the look of macOS in light and dark mode.</p>
+      </div>
+      <div class="gallery">
+        <figure>
+          <img class="window" src="img/game-image.png" width="1400" height="940" loading="lazy"
+               alt="The setup assistant confirming the disc image is Super Mario Galaxy, USA (RMGE01), revision 0.">
+          <figcaption>The setup assistant checks the disc image before installing.</figcaption>
+        </figure>
+        <figure>
+          <img class="window" src="img/installing.png" width="1400" height="940" loading="lazy"
+               alt="The installation page at 63 percent, compiling the game.">
+          <figcaption>The game is compiled on your Mac, step by step.</figcaption>
+        </figure>
+        <figure>
+          <img class="window" src="img/settings-graphics-dark.png" width="1400" height="1037" loading="lazy"
+               alt="The graphics settings in dark mode with HD textures, preloading, anti-aliasing and draw distance.">
+          <figcaption>Settings for display, graphics, sound, controls and the installed game.</figcaption>
+        </figure>
+        <figure>
+          <img class="window" src="img/controls.png" width="1400" height="1040" loading="lazy"
+               alt="The button map for keyboard and mouse, with the Wii equivalent of each action.">
+          <figcaption>The button map for keyboard and mouse, Xbox, PlayStation and Switch Pro.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="credits" aria-labelledby="credits-title">
+      <div class="section-head">
+        <h2 id="credits-title">Credits</h2>
+      </div>
+      <ul class="credits">
+        <li><strong><a href="https://github.com/keepvaibin/nebula">Nebula</a> by keepvaibin.</strong> Orbit is a fork of Nebula. The recompiler, the runtime and the game support are Nebula’s work.</li>
+        <li><strong>HD textures</strong> by <a href="https://forums.dolphin-emu.org/User-cdamjc">CDAMJC and Razius</a>.</li>
+        <li><strong>HD HUD</strong> by <a href="https://www.youtube.com/watch?v=P8lkzqYP7eg">Super Hackio and SY24</a>.</li>
+        <li>The projects Nebula builds on, and glslang, SPIRV-Tools and SPIRV-Cross for shader translation. See the <a href="https://github.com/rubenroblesl/orbit/blob/main/THIRD-PARTY-NOTICES.md">third-party notices</a>.</li>
+        <li>Dolphin, whose custom texture format Orbit reads, and <a href="https://www.gametdb.com">GameTDB</a>, where the app downloads box art.</li>
+        <li>Like Nebula, the macOS port was built with AI coding agents (Anthropic’s Claude), directed, reviewed and tested by the project’s author.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>Orbit includes no Nintendo code, game files or disc images. It is not affiliated with or endorsed by Nintendo.</p>
+      <p>“Super Mario Galaxy”, “Wii” and “Nintendo” are trademarks of Nintendo. Orbit is licensed under the <a href="https://github.com/rubenroblesl/orbit/blob/main/LICENSE">GNU General Public License v3.0</a>.</p>
+    </div>
+  </footer>
+</body>
+</html>
