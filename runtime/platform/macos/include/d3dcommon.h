@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+#pragma once
+#include <windows.h>
+#include_next <d3dcommon.h>
+
+__CRT_UUID_DECL(ID3D10Blob, 0x8ba5fb08, 0x5195, 0x40e2, 0xac, 0x58, 0x0d, 0x98, 0x9c, 0x3a, 0x01, 0x02)
